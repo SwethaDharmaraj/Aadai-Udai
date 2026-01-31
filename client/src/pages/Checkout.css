@@ -1,0 +1,147 @@
+.checkout-page {
+  padding: 24px 20px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.checkout-form h2,
+.payment-section h2 {
+  color: var(--maroon);
+  margin-bottom: 20px;
+}
+
+.address-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.address-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid #ddd;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.address-option.selected {
+  border-color: var(--maroon);
+  background: var(--cream);
+}
+
+.address-option input {
+  margin-top: 4px;
+}
+
+.payment-section .order-summary {
+  background: var(--cream);
+  padding: 20px;
+  border-radius: var(--radius);
+  margin-bottom: 24px;
+  border: 1px dashed var(--maroon);
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.summary-row.total {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #ddd;
+  font-size: 1.2rem;
+  color: var(--maroon);
+}
+
+.payment-methods {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.method-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  background: var(--white);
+  border: 2px solid #eee;
+  border-radius: var(--radius);
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.method-tab.active {
+  border-color: var(--gold);
+  background: var(--sand);
+  color: var(--maroon);
+}
+
+.method-tab .icon {
+  font-size: 1.5rem;
+  margin-bottom: 8px;
+}
+
+.payment-detail-box {
+  background: var(--white);
+  padding: 24px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.w-100 {
+  width: 100%;
+}
+
+.qr-container {
+  margin: 20px auto;
+  padding: 15px;
+  background: #fff;
+  border: 4px solid var(--maroon);
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.mock-card-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.mock-card-form .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.select-prompt {
+  text-align: center;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+.checkout-success .success-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.delivery-note {
+  color: var(--maroon);
+  font-weight: 500;
+  margin: 20px 0;
+}

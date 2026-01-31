@@ -1,0 +1,28 @@
+{
+  "name": "aadaiudai-dress-shop",
+  "version": "1.0.0",
+  "description": "Modern Indian ethnic dress shop - Desktop & Web Application",
+  "main": "electron/main.js",
+  "scripts": {
+    "install:all": "npm install && cd client && npm install && cd ../server && npm install",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "electron": "npm run build && electron .",
+    "start": "node server/index.js",
+    "seed": "cd server && node scripts/seedDatabase.js"
+  },
+  "keywords": [
+    "dress-shop",
+    "e-commerce",
+    "indian-fashion",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "electron": "^28.0.0"
+  }
+}

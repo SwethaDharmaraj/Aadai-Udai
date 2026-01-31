@@ -1,0 +1,163 @@
+.orders-page {
+  padding: 24px 20px;
+}
+
+.orders-page .empty {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-light);
+}
+
+.orders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.order-card {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.order-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: var(--cream);
+}
+
+.order-header .status {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.order-header .status.pending {
+  background: #ffeaa7;
+  color: #666;
+}
+
+.order-header .status.confirmed {
+  background: #55efc4;
+  color: #006;
+}
+
+.order-header .status.shipped {
+  background: #74b9ff;
+  color: #006;
+}
+
+.order-header .status.delivered {
+  background: #00b894;
+  color: #fff;
+}
+
+.order-items {
+  padding: 20px;
+}
+
+.order-item {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.order-item img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.order-footer {
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order-footer .date {
+  color: var(--text-light);
+  font-size: 0.9rem;
+}
+
+/* Tracking Timeline */
+.order-tracking {
+  padding: 20px;
+  background: #fafafa;
+  border-top: 1px solid #eee;
+}
+
+.order-tracking h4 {
+  margin-bottom: 20px;
+  font-size: 1rem;
+  color: var(--maroon);
+}
+
+.tracking-timeline {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  padding-bottom: 20px;
+}
+
+.tracking-timeline::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #ddd;
+  z-index: 1;
+}
+
+.tracking-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  flex: 1;
+}
+
+.step-dot {
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  margin-bottom: 8px;
+}
+
+.tracking-step.done .step-dot {
+  background: var(--maroon);
+  border-color: var(--maroon);
+}
+
+.step-label {
+  font-size: 0.75rem;
+  color: #888;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.tracking-step.done .step-label {
+  color: var(--maroon);
+  font-weight: 600;
+}
+
+.order-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
