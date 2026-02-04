@@ -17,34 +17,42 @@ export const generateInvoice = (order, transaction) => {
     // Invoice Details
     doc.setTextColor(0, 0, 0);
     doc.setFontSize(12);
+    const orderId = order.order_id || order.orderId || order.id;
+    const transactionId = transaction.transaction_id || transaction.transactionId || transaction.id;
+    const paymentMethod = transaction.payment_method || transaction.paymentMethod || 'N/A';
+    const razorpayPaymentId = transaction.razorpay_payment_id || transaction.razorpayPaymentId;
+    const subtotal = order.total_amount || order.totalAmount || order.subtotal || 0;
+    const shippingAddress = order.shipping_address || order.shippingAddress || {};
+    const items = order.order_items || order.orderItems || order.items || [];
+
     doc.text(`Invoice Date: ${new Date().toLocaleString()}`, pageWidth - 20, 55, { align: 'right' });
-    doc.text(`Order ID: ${order.orderId}`, 20, 55);
-    doc.text(`Transaction ID: ${transaction.transactionId}`, 20, 62);
-    doc.text(`Payment Mode: ${transaction.paymentMethod || 'N/A'}`, 20, 69);
-    if (transaction.razorpayPaymentId) {
-        doc.text(`Razorpay ID: ${transaction.razorpayPaymentId}`, 20, 76);
+    doc.text(`Order ID: ${orderId}`, 20, 55);
+    doc.text(`Transaction ID: ${transactionId}`, 20, 62);
+    doc.text(`Payment Mode: ${paymentMethod}`, 20, 69);
+    if (razorpayPaymentId) {
+        doc.text(`Razorpay ID: ${razorpayPaymentId}`, 20, 76);
     }
 
     // Delivery Address
     doc.setFontSize(14);
     doc.text('Delivery Address:', 20, 85);
     doc.setFontSize(10);
-    const addr = order.shippingAddress;
+    const addr = shippingAddress;
     doc.text([
-        addr.name,
-        addr.phone,
-        addr.addressLine1,
+        addr.name || 'N/A',
+        addr.phone || '',
+        addr.addressLine1 || '',
         addr.addressLine2 || '',
-        `${addr.city}, ${addr.state} - ${addr.pincode}`
+        `${addr.city || ''}, ${addr.state || ''} - ${addr.pincode || ''}`
     ].filter(Boolean), 20, 92);
 
     // Products Table
-    const tableData = order.items.map(item => [
-        item.name,
-        item.size,
-        item.quantity,
-        `INR ${item.price.toFixed(2)}`,
-        `INR ${(item.price * item.quantity).toFixed(2)}`
+    const tableData = items.map(item => [
+        item.products?.name || item.product?.name || item.name || 'Product',
+        item.size || '-',
+        item.quantity || 0,
+        `INR ${(item.price || 0).toFixed(2)}`,
+        `INR ${((item.price || 0) * (item.quantity || 0)).toFixed(2)}`
     ]);
 
     autoTable(doc, {
@@ -56,9 +64,9 @@ export const generateInvoice = (order, transaction) => {
     });
 
     // Total
-    const finalY = doc.lastAutoTable.finalY + 10;
+    const finalY = (doc.lastAutoTable?.finalY || 125) + 10;
     doc.setFontSize(14);
-    doc.text(`Total Amount: INR ${order.subtotal.toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
+    doc.text(`Total Amount: INR ${parseFloat(subtotal).toFixed(2)}`, pageWidth - 20, finalY, { align: 'right' });
 
     // Footer
     doc.setFontSize(10);

@@ -1,7 +1,4 @@
-const Order = require('../models/Order');
-const Transaction = require('../models/Transaction');
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 
@@ -18,146 +15,240 @@ const generateTxnId = () => 'TXN' + Date.now() + crypto.randomInt(100, 999);
 exports.createFromCart = async (req, res) => {
   try {
     const { addressId } = req.body;
-    const user = req.user;
-    const address = user.addresses.id(addressId);
-    if (!address) return res.status(400).json({ error: 'Invalid address' });
 
-    const cart = await Cart.findOne({ user: user._id }).populate('items.product');
-    if (!cart || cart.items.length === 0) return res.status(400).json({ error: 'Cart is empty' });
+    // Get user and address (Use Admin to ensure we can read all profiles if needed, though usually profiles are public-ish)
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('addresses')
+      .eq('id', req.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('Order Error: Profile missing for user', req.user.id);
+      return res.status(400).json({ error: 'User profile not found. Please save a delivery address first.' });
+    }
+
+    const address = profile.addresses?.find(a => a.id === addressId || a._id === addressId);
+    if (!address) {
+      return res.status(400).json({ error: 'Selected Delivery Address is invalid or missing.' });
+    }
+
+    // Get cart items and product details
+    const { data: cartItems, error: cartError } = await supabaseAdmin
+      .from('cart_items')
+      .select('*, products(*)')
+      .eq('user_id', req.user.id);
+
+    if (cartError || !cartItems?.length) return res.status(400).json({ error: 'Cart is empty' });
 
     let subtotal = 0;
-    const items = [];
-    for (const ci of cart.items) {
-      const p = ci.product;
-      const price = p.discountedPrice ?? p.price;
+    const orderItemsData = [];
+    for (const ci of cartItems) {
+      const p = ci.products;
+      if (!p) return res.status(400).json({ error: `Product info missing for cart item` });
+
+      const price = p.discounted_price || p.discountedPrice || p.price;
       if (p.stock < ci.quantity) return res.status(400).json({ error: `Insufficient stock for ${p.name}` });
-      items.push({
-        product: p._id,
-        name: p.name,
+
+      orderItemsData.push({
+        product_id: p.id,
         price,
         quantity: ci.quantity,
-        size: ci.size,
-        image: p.images?.[0] || ''
+        size: ci.size
       });
       subtotal += price * ci.quantity;
     }
 
-    const orderId = generateOrderId();
-    const order = await Order.create({
-      orderId,
-      user: user._id,
-      items,
-      subtotal,
-      shippingAddress: address.toObject()
-    });
+    // 1. Create Order
+    const orderIdCode = generateOrderId();
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert([{
+        user_id: req.user.id,
+        order_id: orderIdCode,
+        total_amount: subtotal,
+        status: 'pending',
+        shipping_address: address
+      }])
+      .select()
+      .single();
 
-    // Create Razorpay Order if configured
-    let razorpayOrder = null;
-    if (razorpay) {
-      try {
-        razorpayOrder = await razorpay.orders.create({
-          amount: Math.round(subtotal * 100), // Amount in paise
-          currency: 'INR',
-          receipt: orderId
-        });
-      } catch (rzpErr) {
-        console.warn('Razorpay order creation failed, falling back to demo mode:', rzpErr);
-      }
-    }
+    if (orderError) throw orderError;
 
-    const txnId = generateTxnId();
-    const txn = await Transaction.create({
-      transactionId: txnId,
-      order: order._id,
-      orderId,
-      user: user._id,
-      amount: subtotal,
-      paymentMethod: razorpayOrder ? 'Razorpay' : 'Demo',
-      paymentStatus: 'pending',
-      razorpayOrderId: razorpayOrder?.id
-    });
+    // 2. Create Order Items
+    const itemsToInsert = orderItemsData.map(item => ({ ...item, order_id: order.id }));
+    const { error: itemsError } = await supabaseAdmin.from('order_items').insert(itemsToInsert);
+    if (itemsError) throw itemsError;
 
-    // Reserve stock
-    for (const ci of cart.items) {
-      await Product.findByIdAndUpdate(ci.product._id, { $inc: { stock: -ci.quantity } });
-    }
-    cart.items = [];
-    cart.updatedAt = new Date();
-    await cart.save();
-
-    res.status(201).json({
-      order: await Order.findById(order._id).populate('items.product'),
-      transaction: txn,
-      razorpayKey: process.env.RAZORPAY_KEY_ID,
-      razorpayOrder,
-      isDemo: !razorpayOrder
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Order creation failed' });
-  }
-};
-
-exports.createBuyNow = async (req, res) => {
-  try {
-    const { productId, quantity, size, addressId } = req.body;
-    const user = req.user;
-    const address = user.addresses.id(addressId);
-    if (!address) return res.status(400).json({ error: 'Invalid address' });
-
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    if (!product.sizes.includes(size)) return res.status(400).json({ error: 'Invalid size' });
-    if (product.stock < quantity) return res.status(400).json({ error: 'Insufficient stock' });
-
-    const price = product.discountedPrice ?? product.price;
-    const subtotal = price * quantity;
-
-    const orderId = generateOrderId();
-    const order = await Order.create({
-      orderId,
-      user: user._id,
-      items: [{ product: product._id, name: product.name, price, quantity, size, image: product.images?.[0] || '' }],
-      subtotal,
-      shippingAddress: address.toObject()
-    });
-
-    // Create Razorpay Order if configured
+    // 3. Create (or try to create) Razorpay Order
     let razorpayOrder = null;
     if (razorpay) {
       try {
         razorpayOrder = await razorpay.orders.create({
           amount: Math.round(subtotal * 100),
           currency: 'INR',
-          receipt: orderId
+          receipt: orderIdCode
         });
       } catch (rzpErr) {
         console.warn('Razorpay order creation failed, falling back to demo mode:', rzpErr);
       }
     }
 
-    const txnId = generateTxnId();
-    const txn = await Transaction.create({
-      transactionId: txnId,
-      order: order._id,
-      orderId,
-      user: user._id,
-      amount: subtotal,
-      paymentMethod: razorpayOrder ? 'Razorpay' : 'Demo',
-      paymentStatus: 'pending',
-      razorpayOrderId: razorpayOrder?.id
-    });
+    // 4. Create Transaction
+    const txnIdCode = generateTxnId();
+    const { data: txn, error: txnError } = await supabaseAdmin
+      .from('transactions')
+      .insert([{
+        user_id: req.user.id,
+        order_id: order.id,
+        transaction_id: txnIdCode,
+        amount: subtotal,
+        payment_method: razorpayOrder ? 'Razorpay' : 'Demo',
+        payment_status: 'pending',
+        razorpay_order_id: razorpayOrder?.id
+      }])
+      .select()
+      .single();
 
-    await Product.findByIdAndUpdate(productId, { $inc: { stock: -quantity } });
+    if (txnError) {
+      console.error('Transaction Creation Error (Cart):', txnError);
+      throw txnError;
+    }
+    console.log('Transaction Created (Cart):', txn);
+
+    // 5. Update stock and clear cart
+    // 5. Update stock and clear cart
+    for (const ci of cartItems) {
+      const p = ci.products;
+      const updates = { stock: p.stock - ci.quantity };
+
+      if (p.variant_stock && p.variant_stock[ci.size] !== undefined) {
+        const currentVariantStock = parseInt(p.variant_stock[ci.size]) || 0;
+        const newVariantStock = Math.max(0, currentVariantStock - ci.quantity);
+        updates.variant_stock = { ...p.variant_stock, [ci.size]: newVariantStock };
+      }
+
+      await supabaseAdmin.from('products').update(updates).eq('id', ci.product_id);
+    }
+    await supabaseAdmin.from('cart_items').delete().eq('user_id', req.user.id);
 
     res.status(201).json({
-      order: await Order.findById(order._id).populate('items.product'),
+      order,
       transaction: txn,
       razorpayKey: process.env.RAZORPAY_KEY_ID,
       razorpayOrder,
       isDemo: !razorpayOrder
     });
   } catch (err) {
-    res.status(500).json({ error: 'Order creation failed' });
+    console.error('Create from cart error:', err);
+    res.status(500).json({ error: 'Order creation failed: ' + (err.message || err.error_description || 'Unknown Error') });
+  }
+};
+
+exports.createBuyNow = async (req, res) => {
+  try {
+    const { productId, quantity, size, addressId } = req.body;
+
+    // Get user and address
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('addresses')
+      .eq('id', req.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('BuyNow Error: Profile missing for user', req.user.id);
+      return res.status(400).json({ error: 'User profile not found. Please save a delivery address first.' });
+    }
+
+    const address = profile.addresses?.find(a => a.id === addressId || a._id === addressId);
+    if (!address) {
+      return res.status(400).json({ error: 'Selected Delivery Address is invalid or missing.' });
+    }
+
+    const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', productId).single();
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (!product.sizes.includes(size)) return res.status(400).json({ error: 'Invalid size' });
+    if (product.stock < quantity) return res.status(400).json({ error: 'Insufficient stock' });
+
+    const price = product.discounted_price || product.discountedPrice || product.price;
+    const subtotal = price * quantity;
+
+    const orderIdCode = generateOrderId();
+    const { data: order, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert([{
+        user_id: req.user.id,
+        order_id: orderIdCode,
+        total_amount: subtotal,
+        status: 'pending',
+        shipping_address: address
+      }])
+      .select()
+      .single();
+
+    if (orderError) throw orderError;
+
+    await supabaseAdmin.from('order_items').insert([{
+      order_id: order.id,
+      product_id: product.id,
+      price,
+      quantity,
+      size
+    }]);
+
+    let razorpayOrder = null;
+    if (razorpay) {
+      try {
+        razorpayOrder = await razorpay.orders.create({
+          amount: Math.round(subtotal * 100),
+          currency: 'INR',
+          receipt: orderIdCode
+        });
+      } catch (rzpErr) {
+        console.warn('Razorpay order creation failed, falling back to demo mode:', rzpErr);
+      }
+    }
+
+    const txnIdCode = generateTxnId();
+    const { data: txn, error: txnError } = await supabaseAdmin
+      .from('transactions')
+      .insert([{
+        user_id: req.user.id,
+        order_id: order.id,
+        transaction_id: txnIdCode,
+        amount: subtotal,
+        payment_method: razorpayOrder ? 'Razorpay' : 'Demo',
+        payment_status: 'pending',
+        razorpay_order_id: razorpayOrder?.id
+      }])
+      .select()
+      .single();
+
+    if (txnError) {
+      console.error('Transaction Creation Error (BuyNow):', txnError);
+      throw txnError;
+    }
+    console.log('Transaction Created (BuyNow):', txn);
+
+    const updates = { stock: product.stock - quantity };
+    if (product.variant_stock && product.variant_stock[size] !== undefined) {
+      const currentVariantStock = parseInt(product.variant_stock[size]) || 0;
+      const newVariantStock = Math.max(0, currentVariantStock - quantity);
+      updates.variant_stock = { ...product.variant_stock, [size]: newVariantStock };
+    }
+
+    await supabaseAdmin.from('products').update(updates).eq('id', product.id);
+
+    res.status(201).json({
+      order,
+      transaction: txn,
+      razorpayKey: process.env.RAZORPAY_KEY_ID,
+      razorpayOrder,
+      isDemo: !razorpayOrder
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Order creation failed: ' + (err.message || 'Unknown') });
   }
 };
 
@@ -165,38 +256,68 @@ exports.confirmPayment = async (req, res) => {
   try {
     const {
       transactionId,
+      transaction_id,
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
       razorpayPaymentId,
       razorpayOrderId,
       razorpaySignature,
-      paymentMethod
+      paymentMethod,
+      isDemo
     } = req.body;
 
-    const txn = await Transaction.findOne({ transactionId, user: req.user._id });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    const tId = transactionId || transaction_id;
+    const rzpPaymentId = razorpay_payment_id || razorpayPaymentId;
+    const rzpOrderId = razorpay_order_id || razorpayOrderId;
+    const rzpSignature = razorpay_signature || razorpaySignature;
 
-    // Verify signature only for real Razorpay orders
-    if (txn.paymentMethod === 'Razorpay' && !req.body.isDemo) {
-      const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
-      shasum.update(`${razorpayOrderId}|${razorpayPaymentId}`);
-      const digest = shasum.digest('hex');
+    console.log('[PAYMENT-DEBUG-SERVER] Received Body:', req.body);
+    console.log('Confirming Payment for Transaction:', {
+      receivedId: tId,
+      rzpPaymentId,
+      rzpOrderId,
+      userId: req.user.id
+    });
 
-      if (digest !== razorpaySignature) {
-        txn.paymentStatus = 'failed';
-        await txn.save();
-        return res.status(400).json({ error: 'Invalid payment signature' });
-      }
-      txn.razorpayPaymentId = razorpayPaymentId;
-      txn.razorpaySignature = razorpaySignature;
-    } else {
-      // Demo mode confirmation
-      txn.paymentMethod = paymentMethod || 'Demo';
+    if (!tId) {
+      console.error('[PAYMENT-DEBUG-SERVER] Error: tId is missing!');
+      return res.status(400).json({ error: 'Transaction ID (transactionId) is required' });
     }
 
-    txn.paymentStatus = 'success';
-    await txn.save();
+    const { data: txn, error: txnError } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('transaction_id', tId)
+      .eq('user_id', req.user.id)
+      .single();
 
-    await Order.findByIdAndUpdate(txn.order, { status: 'confirmed' });
-    res.json({ message: 'Payment confirmed', transaction: txn });
+    if (txnError || !txn) {
+      console.error('Confirm Payment Error: Transaction not found in DB', { tId, userId: req.user.id, txnError });
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    const updates = { payment_status: 'success' };
+
+    if (txn.payment_method === 'Razorpay' && !isDemo) {
+      const shasum = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+      shasum.update(`${rzpOrderId}|${rzpPaymentId}`);
+      const digest = shasum.digest('hex');
+
+      if (digest !== rzpSignature) {
+        await supabaseAdmin.from('transactions').update({ payment_status: 'failed' }).eq('id', txn.id);
+        return res.status(400).json({ error: 'Invalid payment signature' });
+      }
+      updates.razorpay_payment_id = rzpPaymentId;
+      updates.razorpay_signature = rzpSignature;
+    } else {
+      updates.payment_method = paymentMethod || 'Demo';
+    }
+
+    await supabaseAdmin.from('transactions').update(updates).eq('id', txn.id);
+    await supabaseAdmin.from('orders').update({ status: 'confirmed' }).eq('id', txn.order_id);
+
+    res.json({ message: 'Payment confirmed' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to confirm payment' });
   }
@@ -204,8 +325,14 @@ exports.confirmPayment = async (req, res) => {
 
 exports.getOrder = async (req, res) => {
   try {
-    const order = await Order.findOne({ _id: req.params.id, user: req.user._id }).populate('items.product');
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    const { data: order, error } = await supabaseAdmin
+      .from('orders')
+      .select('*, order_items(*, products(*))')
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id)
+      .single();
+
+    if (error || !order) return res.status(404).json({ error: 'Order not found' });
     res.json(order);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch order' });
@@ -214,11 +341,16 @@ exports.getOrder = async (req, res) => {
 
 exports.getOrderTransaction = async (req, res) => {
   try {
-    const txn = await Transaction.findOne({ order: req.params.id, user: req.user._id });
-    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    const { data: txn, error } = await supabaseAdmin
+      .from('transactions')
+      .select('*')
+      .eq('order_id', req.params.id)
+      .eq('user_id', req.user.id)
+      .single();
+
+    if (error || !txn) return res.status(404).json({ error: 'Transaction not found' });
     res.json(txn);
   } catch (err) {
-    console.error('Fetch transaction error:', err);
     res.status(500).json({ error: 'Failed to fetch transaction' });
   }
 };

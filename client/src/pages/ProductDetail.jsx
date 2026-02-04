@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import Zoom from 'react-medium-image-zoom';
+import 'react-medium-image-zoom/dist/styles.css';
 import { productAPI, cartAPI } from '../api';
 import './ProductDetail.css';
 
@@ -10,11 +12,13 @@ export default function ProductDetail() {
   const [size, setSize] = useState('');
   const [qty, setQty] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   useEffect(() => {
     productAPI.getById(id).then((p) => {
       setProduct(p);
       setSize(''); // Force user to select a size
+      setSelectedImageIndex(0); // Reset image on product load
     }).catch(() => setProduct(null)).finally(() => setLoading(false));
   }, [id]);
 
@@ -52,27 +56,61 @@ export default function ProductDetail() {
   if (loading) return <div className="container"><p>Loading...</p></div>;
   if (!product) return <div className="container"><p>Product not found.</p></div>;
 
-  const price = product.discountedPrice ?? product.price;
+  const price = product.discounted_price || product.discountedPrice || product.price;
+  const images = product.images || [];
+  const mainImage = images[selectedImageIndex] || images[0] || '';
+
+
+  const getStockForSize = (s) => {
+    if (!product) return 0;
+    if (product.variant_stock && product.variant_stock[s] !== undefined) {
+      return parseInt(product.variant_stock[s]);
+    }
+    // Fallback logic: if no variant stock, assume global stock applies to all (or just checking global)
+    // But if variant_stock exists for ANY size, we should probably assume it exists for all.
+    // If variant_stock is empty/null, return product.stock
+    if (product.variant_stock && Object.keys(product.variant_stock).length > 0) {
+      return 0; // If variant stock system is active but this size missing, assume 0
+    }
+    return product.stock;
+  };
+
+  const currentStock = size ? getStockForSize(size) : product.stock;
+  const isOutOfStock = size ? currentStock === 0 : product.stock === 0;
 
   return (
     <div className="product-detail-page container">
       <div className="product-detail-grid">
         <div className="product-gallery">
           <div className="main-image">
-            <img src={size ? (product.images?.[0] || '') : (product.images?.[0] || '')} alt={product.name} />
+            {mainImage ? (
+              <Zoom>
+                <img src={mainImage} alt={product.name} />
+              </Zoom>
+            ) : (
+              <div className="placeholder-image">No Image</div>
+            )}
           </div>
-          <div className="thumbnail-strip">
-            {(product.images || []).map((img, i) => (
-              <img key={i} src={img} alt={`${product.name} ${i + 1}`} className="thumb" />
-            ))}
-          </div>
+          {images.length > 1 && (
+            <div className="thumbnail-strip">
+              {images.map((img, i) => (
+                <img
+                  key={i}
+                  src={img}
+                  alt={`${product.name} ${i + 1}`}
+                  className={`thumb ${selectedImageIndex === i ? 'active' : ''}`}
+                  onClick={() => setSelectedImageIndex(i)}
+                />
+              ))}
+            </div>
+          )}
         </div>
         <div className="product-detail-info">
           <h1>{product.name}</h1>
-          <p className="category">{product.category} {product.subCategory && `> ${product.subCategory}`}</p>
+          <p className="category">{product.category} {(product.sub_category || product.subCategory) && `> ${product.sub_category || product.subCategory}`}</p>
           <div className="price-row">
-            {product.discountedPrice ? (
-              <><span className="old">₹{product.price}</span> <span className="price">₹{product.discountedPrice}</span></>
+            {(product.discounted_price || product.discountedPrice) ? (
+              <><span className="old">₹{product.price}</span> <span className="price">₹{product.discounted_price || product.discountedPrice}</span></>
             ) : (
               <span className="price">₹{product.price}</span>
             )}
@@ -81,22 +119,47 @@ export default function ProductDetail() {
           <div className="sizes">
             <label>Select Size <span className="required">*</span></label>
             <div className="size-options">
-              {(product.sizes || []).map((s) => (
-                <button key={s} className={size === s ? 'active' : ''} onClick={() => setSize(s)}>{s}</button>
-              ))}
+              {(product.sizes || []).map((s) => {
+                const stock = getStockForSize(s);
+                return (
+                  <button
+                    key={s}
+                    className={`${size === s ? 'active' : ''} ${stock === 0 ? 'out-of-stock' : ''}`}
+                    onClick={() => setSize(s)}
+                    disabled={stock === 0}
+                    title={stock === 0 ? 'Out of Stock' : `${stock} available`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
             </div>
             {!size && <p className="size-warning">Please select a size to continue</p>}
           </div>
+
           <div className="quantity">
             <label>Quantity</label>
-            <input type="number" min={1} max={product.stock} value={qty} onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))} />
+            <input
+              type="number"
+              min={1}
+              max={size ? currentStock : product.stock}
+              value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(parseInt(e.target.value) || 1, size ? currentStock : product.stock)))}
+              disabled={isOutOfStock}
+            />
           </div>
-          <p className="stock-status">In stock: {product.stock}</p>
+
+          <p className={`stock-status ${currentStock < 5 ? 'low' : ''} ${currentStock === 0 ? 'out' : ''}`}>
+            {size
+              ? (currentStock > 0 ? `In Stock: ${currentStock} units` : 'Out of Stock')
+              : (product.stock > 0 ? 'In Stock' : 'Out of Stock')}
+          </p>
+
           <div className="actions">
-            <button className="btn btn-primary" onClick={addToCart} disabled={product.stock === 0 || !size}>
+            <button className="btn btn-primary" onClick={addToCart} disabled={isOutOfStock || !size}>
               Add to Cart
             </button>
-            <button className="btn btn-gold" onClick={buyNow} disabled={product.stock === 0 || !size}>
+            <button className="btn btn-gold" onClick={buyNow} disabled={isOutOfStock || !size}>
               Buy Now
             </button>
           </div>

@@ -42,11 +42,12 @@ export default function About() {
           <div className="location-card">
             <div className="location-info">
               <h4>📍 Our Store</h4>
-              <p>123 Fashion Street, T. Nagar<br />Chennai, Tamil Nadu 600017</p>
+              <p>AadaiUdai, 4/463, VPN Towers , Vijayapuri Main Road, Vijayamangalam,Erode - 638056, Tamilnadu, India
+              </p>
               <h4>📞 Phone</h4>
-              <p>+91 98765 43210</p>
+              <p>+91 8122635618</p>
               <h4>✉️ Email</h4>
-              <p>support@aadaiudai.com</p>
+              <p>support@ aadaiudai21@gmail.com</p>
             </div>
           </div>
         </div>

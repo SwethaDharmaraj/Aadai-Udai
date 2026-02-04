@@ -62,7 +62,7 @@ function Dashboard() {
         <div className="alert-box">
           <h3>Low Stock Alert</h3>
           {data.lowStockProducts.map(p => (
-            <p key={p._id}>{p.name} - Only {p.stock} left</p>
+            <p key={p.id}>{p.name} - Only {p.stock} left</p>
           ))}
         </div>
       )}
@@ -73,10 +73,10 @@ function Dashboard() {
           <thead><tr><th>Order ID</th><th>User</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>
             {(data.recentOrders || []).map(o => (
-              <tr key={o._id}>
-                <td>{o.orderId}</td>
-                <td>{o.user?.email}</td>
-                <td>₹{o.subtotal}</td>
+              <tr key={o.id}>
+                <td>{o.orderId || o.id}</td>
+                <td>{o.profiles?.email || o.user?.email}</td>
+                <td>₹{o.total_amount || o.subtotal}</td>
                 <td><span className={`status ${o.status}`}>{o.status}</span></td>
               </tr>
             ))}
@@ -91,7 +91,7 @@ function Products() {
   const [products, setProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: '', description: '', category: 'MEN\'S COLLECTION', price: '', discountedPrice: '', sizes: 'S,M,L', stock: '0', featured: false, imageUrl: '' });
+  const [form, setForm] = useState({ name: '', description: '', category: 'MEN\'S COLLECTION', price: '', discountedPrice: '', sizes: 'S,M,L', stock: '0', featured: false, imageUrl: '', variantStock: {} });
   const [imageFiles, setImageFiles] = useState([]);
 
   useEffect(() => { loadProducts(); }, []);
@@ -109,11 +109,31 @@ function Products() {
     formData.append('stock', form.stock);
     formData.append('featured', form.featured);
     if (form.imageUrl) formData.append('images', form.imageUrl);
+    // Calculate total stock if variantStock is used
+    const sizeList = form.sizes.split(',').map(s => s.trim()).filter(s => s);
+    const hasVariants = sizeList.length > 0;
+
+    // Clean variantStock to only include current sizes
+    const cleanVariantStock = {};
+    let totalVariantStock = 0;
+
+    if (hasVariants) {
+      sizeList.forEach(size => {
+        const qty = parseInt(form.variantStock[size] || 0);
+        cleanVariantStock[size] = qty;
+        totalVariantStock += qty;
+      });
+      formData.append('variantStock', JSON.stringify(cleanVariantStock));
+      formData.append('stock', totalVariantStock); // Override manual stock with calculated total
+    } else {
+      formData.append('stock', form.stock);
+    }
+
     imageFiles.forEach(f => formData.append('images', f));
 
     try {
       if (editing) {
-        await adminAPI.updateProduct(editing._id, formData);
+        await adminAPI.updateProduct(editing.id, formData);
       } else {
         await adminAPI.createProduct(formData);
       }
@@ -123,7 +143,7 @@ function Products() {
   };
 
   const resetForm = () => {
-    setForm({ name: '', description: '', category: 'MEN\'S COLLECTION', price: '', discountedPrice: '', sizes: 'S,M,L', stock: '0', featured: false, imageUrl: '' });
+    setForm({ name: '', description: '', category: 'MEN\'S COLLECTION', price: '', discountedPrice: '', sizes: 'S,M,L', stock: '0', featured: false, imageUrl: '', variantStock: {} });
     setImageFiles([]);
     setEditing(null);
     setShowForm(false);
@@ -131,7 +151,18 @@ function Products() {
 
   const handleEdit = (p) => {
     setEditing(p);
-    setForm({ name: p.name, description: p.description || '', category: p.category, price: p.price, discountedPrice: p.discountedPrice || '', sizes: p.sizes?.join(',') || 'S,M,L', stock: p.stock, featured: p.featured, imageUrl: '' });
+    setForm({
+      name: p.name,
+      description: p.description || '',
+      category: p.category,
+      price: p.price,
+      discountedPrice: p.discounted_price || p.discountedPrice || '',
+      sizes: p.sizes?.join(',') || 'S,M,L',
+      stock: p.stock,
+      featured: p.featured,
+      imageUrl: '',
+      variantStock: p.variant_stock || {}
+    });
     setShowForm(true);
   };
 
@@ -168,7 +199,31 @@ function Products() {
           <input type="number" placeholder="Price *" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} required />
           <input type="number" placeholder="Discounted Price" value={form.discountedPrice} onChange={e => setForm({ ...form, discountedPrice: e.target.value })} />
           <input placeholder="Sizes (comma separated)" value={form.sizes} onChange={e => setForm({ ...form, sizes: e.target.value })} />
-          <input type="number" placeholder="Stock *" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} required />
+
+          {/* Variant Stock Inputs */}
+          {form.sizes && (
+            <div className="variant-stock-inputs">
+              <label>Stock per Size:</label>
+              <div className="stock-grid">
+                {form.sizes.split(',').map(s => s.trim()).filter(s => s).map(size => (
+                  <div key={size} className="stock-item">
+                    <span>{size}:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.variantStock[size] || 0}
+                      onChange={e => setForm({
+                        ...form,
+                        variantStock: { ...form.variantStock, [size]: parseInt(e.target.value) || 0 }
+                      })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <input type="number" placeholder="Total Stock (Auto-calculated if sizes exist)" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} disabled={form.sizes.length > 0 && form.sizes.split(',').filter(s => s.trim()).length > 0} required />
           <label className="checkbox-label">
             <input type="checkbox" checked={form.featured} onChange={e => setForm({ ...form, featured: e.target.checked })} />
             Featured Product
@@ -186,17 +241,17 @@ function Products() {
         <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr></thead>
         <tbody>
           {products.map(p => (
-            <tr key={p._id}>
+            <tr key={p.id}>
               <td><img src={p.images?.[0] || '/placeholder.jpg'} alt="" className="product-thumb" /></td>
               <td>{p.name} {p.featured && <span className="badge">Featured</span>}</td>
               <td>{p.category}</td>
-              <td>₹{p.discountedPrice || p.price}</td>
+              <td>₹{p.discounted_price || p.discountedPrice || p.price}</td>
               <td>
-                <input type="number" className="stock-input" value={p.stock} onChange={e => handleStockUpdate(p._id, e.target.value)} min="0" />
+                <input type="number" className="stock-input" value={p.stock} onChange={e => handleStockUpdate(p.id, e.target.value)} min="0" />
               </td>
               <td>
                 <button className="btn-sm" onClick={() => handleEdit(p)}>Edit</button>
-                <button className="btn-sm danger" onClick={() => handleDelete(p._id)}>Delete</button>
+                <button className="btn-sm danger" onClick={() => handleDelete(p.id)}>Delete</button>
               </td>
             </tr>
           ))}
@@ -221,15 +276,15 @@ function Orders() {
         <thead><tr><th>Order ID</th><th>User</th><th>Items</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
         <tbody>
           {orders.map(o => (
-            <tr key={o._id}>
-              <td>{o.orderId}</td>
-              <td>{o.user?.email}</td>
-              <td>{o.items?.length} items</td>
-              <td>₹{o.subtotal}</td>
+            <tr key={o.id}>
+              <td>{o.orderId || o.id}</td>
+              <td>{o.profiles?.email || o.user?.email}</td>
+              <td>{o.order_items?.length || o.items?.length} items</td>
+              <td>₹{o.total_amount || o.subtotal}</td>
               <td><span className={`status ${o.status}`}>{o.status}</span></td>
-              <td>{new Date(o.createdAt).toLocaleDateString()}</td>
+              <td>{new Date(o.created_at || o.createdAt).toLocaleDateString()}</td>
               <td>
-                <select value={o.status} onChange={e => updateStatus(o._id, e.target.value)}>
+                <select value={o.status} onChange={e => updateStatus(o.id, e.target.value)}>
                   <option value="pending">Pending</option>
                   <option value="confirmed">Confirmed</option>
                   <option value="packed">Packed</option>
@@ -266,20 +321,20 @@ function Users() {
         <thead><tr><th>Email</th><th>Name</th><th>Phone</th><th>Role</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
         <tbody>
           {users.map(u => (
-            <tr key={u._id}>
+            <tr key={u.id}>
               <td>{u.email}</td>
               <td>{u.name || '-'}</td>
               <td>{u.phone || '-'}</td>
               <td>
-                <select value={u.role} onChange={e => updateRole(u._id, e.target.value)}>
+                <select value={u.role} onChange={e => updateRole(u.id, e.target.value)}>
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
                 </select>
               </td>
-              <td><span className={`status ${u.isActive !== false ? 'active' : 'inactive'}`}>{u.isActive !== false ? 'Active' : 'Inactive'}</span></td>
-              <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+              <td><span className={`status ${u.is_active !== false ? 'active' : 'inactive'}`}>{u.is_active !== false ? 'Active' : 'Inactive'}</span></td>
+              <td>{new Date(u.created_at || u.createdAt).toLocaleDateString()}</td>
               <td>
-                <button className="btn-sm" onClick={() => toggleActive(u._id, !u.isActive)}>{u.isActive !== false ? 'Deactivate' : 'Activate'}</button>
+                <button className="btn-sm" onClick={() => toggleActive(u.id, !u.is_active)}>{u.is_active !== false ? 'Deactivate' : 'Activate'}</button>
               </td>
             </tr>
           ))}
@@ -309,17 +364,17 @@ function Reviews() {
         <thead><tr><th>Product</th><th>User</th><th>Rating</th><th>Comment</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
         <tbody>
           {reviews.map(r => (
-            <tr key={r._id}>
-              <td>{r.product?.name}</td>
-              <td>{r.user?.email}</td>
+            <tr key={r.id}>
+              <td>{r.products?.name || r.product?.name}</td>
+              <td>{r.profiles?.email || r.user?.email}</td>
               <td>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</td>
-              <td>{r.title} - {r.comment}</td>
-              <td><span className={`status ${r.isApproved ? 'approved' : 'pending'}`}>{r.isApproved ? 'Approved' : 'Pending'}</span></td>
-              <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+              <td>{r.comment}</td>
+              <td><span className={`status ${r.is_approved ? 'approved' : 'pending'}`}>{r.is_approved ? 'Approved' : 'Pending'}</span></td>
+              <td>{new Date(r.created_at || r.createdAt).toLocaleDateString()}</td>
               <td>
-                {!r.isApproved && <button className="btn-sm" onClick={() => approve(r._id, true)}>Approve</button>}
-                {r.isApproved && <button className="btn-sm" onClick={() => approve(r._id, false)}>Reject</button>}
-                <button className="btn-sm danger" onClick={() => deleteReview(r._id)}>Delete</button>
+                {!r.is_approved && <button className="btn-sm" onClick={() => approve(r.id, true)}>Approve</button>}
+                {r.is_approved && <button className="btn-sm" onClick={() => approve(r.id, false)}>Reject</button>}
+                <button className="btn-sm danger" onClick={() => deleteReview(r.id)}>Delete</button>
               </td>
             </tr>
           ))}
@@ -340,14 +395,14 @@ function Transactions() {
         <thead><tr><th>Txn ID</th><th>Order</th><th>User</th><th>Amount</th><th>Method</th><th>Status</th><th>Date</th></tr></thead>
         <tbody>
           {txns.map(t => (
-            <tr key={t._id}>
-              <td>{t.transactionId}</td>
-              <td>{t.orderId}</td>
-              <td>{t.user?.email}</td>
+            <tr key={t.id}>
+              <td>{t.transaction_id || t.transactionId}</td>
+              <td>{t.order_id || t.orderId}</td>
+              <td>{t.profiles?.email || t.user?.email}</td>
               <td>₹{t.amount}</td>
-              <td>{t.paymentMethod}</td>
-              <td><span className={`status ${t.paymentStatus}`}>{t.paymentStatus}</span></td>
-              <td>{new Date(t.createdAt).toLocaleString()}</td>
+              <td>{t.payment_method || t.paymentMethod}</td>
+              <td><span className={`status ${t.payment_status || t.paymentStatus}`}>{t.payment_status || t.paymentStatus}</span></td>
+              <td>{new Date(t.created_at || t.createdAt).toLocaleString()}</td>
             </tr>
           ))}
         </tbody>

@@ -30,14 +30,14 @@
 
 .admin-sidebar a:hover,
 .admin-sidebar a.active {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
   opacity: 1;
 }
 
 .admin-sidebar-footer {
   margin-top: auto;
   padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .admin-sidebar .sidebar-link {
@@ -50,16 +50,16 @@
   width: 100%;
   padding: 10px 16px;
   margin-top: 8px;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
   color: white;
-  border: 1px solid rgba(255,255,255,0.3);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
 }
 
 .sidebar-logout:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .admin-main {
@@ -77,7 +77,7 @@
 }
 
 .admin-dashboard h1,
-.admin-main > div > h1 {
+.admin-main>div>h1 {
   color: var(--maroon);
   margin-bottom: 24px;
 }
@@ -166,16 +166,55 @@
   font-weight: 500;
 }
 
-.status.pending { background: #ffeaa7; color: #856404; }
-.status.confirmed { background: #55efc4; color: #00695c; }
-.status.shipped { background: #74b9ff; color: #1565c0; }
-.status.delivered { background: #00b894; color: #fff; }
-.status.cancelled { background: #ff7675; color: #fff; }
-.status.success { background: #55efc4; color: #00695c; }
-.status.failed { background: #ff7675; color: #fff; }
-.status.approved { background: #55efc4; color: #00695c; }
-.status.active { background: #55efc4; color: #00695c; }
-.status.inactive { background: #ddd; color: #666; }
+.status.pending {
+  background: #ffeaa7;
+  color: #856404;
+}
+
+.status.confirmed {
+  background: #55efc4;
+  color: #00695c;
+}
+
+.status.shipped {
+  background: #74b9ff;
+  color: #1565c0;
+}
+
+.status.delivered {
+  background: #00b894;
+  color: #fff;
+}
+
+.status.cancelled {
+  background: #ff7675;
+  color: #fff;
+}
+
+.status.success {
+  background: #55efc4;
+  color: #00695c;
+}
+
+.status.failed {
+  background: #ff7675;
+  color: #fff;
+}
+
+.status.approved {
+  background: #55efc4;
+  color: #00695c;
+}
+
+.status.active {
+  background: #55efc4;
+  color: #00695c;
+}
+
+.status.inactive {
+  background: #ddd;
+  color: #666;
+}
 
 .admin-form {
   display: grid;
@@ -257,8 +296,61 @@
 }
 
 @media (max-width: 768px) {
-  .admin-page { flex-direction: column; }
-  .admin-sidebar { width: 100%; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .admin-form { grid-template-columns: 1fr; }
+  .admin-page {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+.variant-stock-inputs {
+  grid-column: 1 / -1;
+  background: #fdf5f2;
+  /* Light cream */
+  padding: 16px;
+  border-radius: 8px;
+  margin: 8px 0;
+  border: 1px solid rgba(139, 26, 26, 0.1);
+}
+
+.variant-stock-inputs label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--maroon);
+}
+
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.stock-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stock-item span {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.stock-item input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
 }

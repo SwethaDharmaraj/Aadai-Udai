@@ -21,31 +21,34 @@ export default function Orders() {
       ) : (
         <div className="orders-list">
           {orders.map((o) => (
-            <div key={o._id} className="order-card">
+            <div key={o.id} className="order-card">
               <div className="order-header">
-                <span>Order #{o.orderId}</span>
+                <span>Order #{o.order_id || o.orderId}</span>
                 <span className={`status ${o.status}`}>{o.status}</span>
               </div>
               <div className="order-items">
-                {o.items?.map((i, idx) => (
-                  <div key={idx} className="order-item">
-                    <img src={i.image} alt={i.name} />
-                    <div>
-                      <strong>{i.name}</strong>
-                      <p>Qty: {i.quantity} | Size: {i.size} | ₹{i.price} each</p>
+                {(o.order_items || o.items)?.map((i, idx) => {
+                  const p = i.products || i.product || i;
+                  return (
+                    <div key={idx} className="order-item">
+                      <img src={p.images?.[0] || i.image} alt={p.name || i.name} />
+                      <div>
+                        <strong>{p.name || i.name}</strong>
+                        <p>Qty: {i.quantity} | Size: {i.size} | ₹{i.price} each</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               <div className="order-footer">
                 <div className="order-total">
-                  <strong>Total: ₹{o.subtotal}</strong>
-                  <span className="date">{new Date(o.createdAt).toLocaleDateString()}</span>
+                  <strong>Total: ₹{o.total_amount || o.subtotal}</strong>
+                  <span className="date">{new Date(o.created_at || o.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div className="order-actions">
                   <button className="btn btn-secondary btn-sm" onClick={async () => {
                     try {
-                      const txn = await orderAPI.getOrderByTxn(o._id); // We'll need this API
+                      const txn = await orderAPI.getTransaction(o.id || o._id);
                       generateInvoice(o, txn);
                     } catch (err) {
                       alert('Could not download invoice: ' + err.message);

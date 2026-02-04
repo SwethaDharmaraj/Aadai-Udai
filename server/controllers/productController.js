@@ -1,9 +1,10 @@
-const Product = require('../models/Product');
+const { supabase } = require('../config/supabase');
 
 exports.getAll = async (req, res) => {
   try {
     const { category, search, featured } = req.query;
-    const filter = {};
+    let query = supabase.from('products').select('*');
+
     if (category) {
       const categoryMap = {
         'mens-collection': "MEN'S COLLECTION",
@@ -13,52 +14,45 @@ exports.getAll = async (req, res) => {
         'accessories': "ACCESSORIES",
         'god-items': "GOD ITEMS"
       };
-      filter.category = categoryMap[category] || category;
+      query = query.eq('category', categoryMap[category] || category);
     }
-    if (search) filter.name = { $regex: search, $options: 'i' };
-    if (featured === 'true') filter.featured = true;
-    const products = await Product.find(filter).sort({ createdAt: -1 });
+
+    if (search) {
+      query = query.ilike('name', `%${search}%`);
+    }
+
+    if (featured === 'true') {
+      query = query.eq('featured', true);
+    }
+
+    const { data: products, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase error fetching all products:', error);
+      throw error;
+    }
     res.json(products);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch products' });
+    console.error('Get all products error:', err);
+    res.status(500).json({ error: 'Failed to fetch products', details: err.message });
   }
 };
 
 exports.getById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+    const { data: product, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) {
+      console.error('Supabase error fetching product by ID:', error);
+      return res.status(404).json({ error: 'Product not found' });
+    }
     res.json(product);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch product' });
-  }
-};
-
-exports.create = async (req, res) => {
-  try {
-    const product = await Product.create(req.body);
-    res.status(201).json(product);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create product' });
-  }
-};
-
-exports.update = async (req, res) => {
-  try {
-    const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update product' });
-  }
-};
-
-exports.remove = async (req, res) => {
-  try {
-    const product = await Product.findByIdAndDelete(req.params.id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    res.json({ message: 'Product deleted' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete product' });
+    console.error('Get product by ID error:', err);
+    res.status(500).json({ error: 'Failed to fetch product', details: err.message });
   }
 };

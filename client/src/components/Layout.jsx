@@ -34,8 +34,8 @@ export default function Layout() {
         <div className="header-top">
           <div className="container header-inner">
             <Link to="/" className="logo">
-              <span className="logo-icon">அ</span>
-              <span className="logo-text">AADAIUDAI</span>
+              <span className="logo-icon">ஆ</span>
+              <span className="logo-text">ஆடை உடை</span>
             </Link>
             <form className="search-bar" onSubmit={handleSearch}>
               <input
@@ -67,6 +67,7 @@ export default function Layout() {
                 <>
                   <Link to="/cart" className="nav-link">Cart</Link>
                   <Link to="/admin/login" className="nav-link">Admin</Link>
+                  <Link to="/register" className="nav-link">Sign Up</Link>
                   <Link to="/login" className="btn btn-primary nav-btn">Login</Link>
                 </>
               )}
@@ -112,9 +113,10 @@ export default function Layout() {
           </div>
           <div className="footer-section">
             <h4>Contact</h4>
-            <p>📍 123 Fashion Street, Chennai, TN 600001</p>
-            <p>📞 +91 98765 43210</p>
-            <p>✉️ support@aadaiudai.com</p>
+            <p>📍AadaiUdai, 4/463, VPN Towers , Vijayapuri Main Road, Vijayamangalam,Erode - 638056, Tamilnadu, India
+            </p>
+            <p>📞 +918122635618</p>
+            <p>✉️ support@ aadaiudai21@gmail.com</p>
           </div>
         </div>
         <div className="footer-bottom">

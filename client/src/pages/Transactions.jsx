@@ -20,16 +20,16 @@ export default function Transactions() {
       ) : (
         <div className="transactions-list">
           {transactions.map((t) => (
-            <div key={t._id} className="transaction-card">
+            <div key={t.id} className="transaction-card">
               <div className="txn-row">
-                <span className="txn-id">{t.transactionId}</span>
-                <span className={`status ${t.paymentStatus}`}>{t.paymentStatus}</span>
+                <span className="txn-id">{t.transaction_id || t.transactionId}</span>
+                <span className={`status ${t.payment_status || t.paymentStatus}`}>{t.payment_status || t.paymentStatus}</span>
               </div>
               <div className="txn-details">
-                <p>Order: {t.orderId}</p>
+                <p>Order: {t.orders?.order_id || t.orderId}</p>
                 <p>Amount: ₹{t.amount}</p>
-                <p>Method: {t.paymentMethod}</p>
-                <p>Date: {new Date(t.createdAt).toLocaleString()}</p>
+                <p>Method: {t.payment_method || t.paymentMethod}</p>
+                <p>Date: {new Date(t.created_at || t.createdAt).toLocaleString()}</p>
               </div>
             </div>
           ))}

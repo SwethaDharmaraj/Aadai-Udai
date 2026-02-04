@@ -7,6 +7,7 @@ import './Login.css';
 export default function Login({ isAdmin = false }) {
   const [step, setStep] = useState(1);
   const [email, setEmail] = useState(isAdmin ? 'admin@aadaiudai.com' : '');
+  const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -15,25 +16,43 @@ export default function Login({ isAdmin = false }) {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSendOTP = async (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setMessage('');
-    setDevOtp('');
-    
+
     if (!email || !email.includes('@')) {
       setError('Enter a valid email address');
       return;
     }
-    
+
+    if (!password) {
+      setError('Password is required');
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await authAPI.sendOTP(email);
-      setMessage(res.message || 'OTP sent');
-      setDevOtp(res.devOtp || '');
-      setStep(2);
+      const res = await authAPI.login({ email, password });
+      // res is { user, session }
+      login(res.user, res.session.access_token);
+
+      // Force navigation based on role
+      if (res.user?.role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to send OTP');
+      console.error('[LOGIN-FAIL]', err);
+      const msg = err.message?.toLowerCase() || '';
+      if (msg.includes('email not confirmed') || msg.includes('not verified')) {
+        setError('Your email is not verified yet. Please check your inbox for the link.');
+      } else if (msg.includes('invalid login credentials')) {
+        setError('Invalid email or password. If you don\'t have an account, please Register first.');
+      } else {
+        setError(err.message || 'Login failed. Check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -42,23 +61,25 @@ export default function Login({ isAdmin = false }) {
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     if (otp.length !== 6) {
       setError('Enter 6-digit OTP');
       return;
     }
-    
+
     setLoading(true);
     try {
-      const res = await authAPI.verifyOTP(email, otp);
-      login(res.user, res.token);
-      if (res.user?.role === 'admin') {
-        navigate('/admin');
+      const res = await authAPI.verifyOTP({ email, token: otp, type: 'signup' });
+      // If verification returns a session, log them in
+      if (res.session) {
+        login(res.user, res.session.access_token);
+        navigate(res.user?.role === 'admin' ? '/admin' : '/');
       } else {
-        navigate('/');
+        setMessage('Email verified! You can now login.');
+        setStep(1);
       }
     } catch (err) {
-      setError(err.message || 'Invalid OTP');
+      setError(err.message || 'Invalid OTP or code expired');
     } finally {
       setLoading(false);
     }
@@ -77,18 +98,31 @@ export default function Login({ isAdmin = false }) {
         </div>
 
         {step === 1 ? (
-          <form onSubmit={handleSendOTP} className="login-form">
-            <label>Email Address</label>
-            <input
-              type="email"
-              placeholder={isAdmin ? "admin@aadaiudai.com" : "Enter your email"}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input"
-              required
-            />
-            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? 'Sending...' : 'Send OTP'}
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                placeholder={isAdmin ? "admin@aadaiudai.com" : "Enter your email"}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-full shadow-hover" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
             </button>
           </form>
         ) : (
@@ -101,21 +135,23 @@ export default function Login({ isAdmin = false }) {
                 <p className="otp-display">{devOtp}</p>
               </div>
             )}
-            <label>Enter OTP</label>
-            <input
-              type="text"
-              placeholder="6-digit OTP"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-              className="input"
-              maxLength={6}
-              required
-            />
-            <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? 'Verifying...' : 'Verify & Login'}
+            <div className="form-group">
+              <label>Enter OTP</label>
+              <input
+                type="text"
+                placeholder="6-digit OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="input"
+                maxLength={6}
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-full shadow-hover" disabled={loading}>
+              {loading ? 'Verifying...' : 'Verify & Complete Login'}
             </button>
             <button type="button" className="link-btn" onClick={() => { setStep(1); setOtp(''); setError(''); setMessage(''); setDevOtp(''); }}>
-              Change email
+              Back to Login
             </button>
           </form>
         )}
@@ -124,13 +160,13 @@ export default function Login({ isAdmin = false }) {
 
         {isAdmin && (
           <p className="login-note">
-            <strong>Admin:</strong> admin@aadaiudai.com | OTP: 123456
+            <strong>Admin:</strong> admin@aadaiudai.com | Pass: admin123 (after setup)
           </p>
         )}
-        {!isAdmin && (
-          <p className="login-note">
-            New? Enter your email to register. OTP valid for 5 min.
-          </p>
+        {!isAdmin && step === 1 && (
+          <div className="login-footer">
+            <p>New here? <Link to="/register">Create an account</Link></p>
+          </div>
         )}
 
         {isAdmin ? (

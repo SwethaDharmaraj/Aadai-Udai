@@ -68,16 +68,16 @@ export default function Home() {
         <h2 className="section-title">Featured Products</h2>
         <div className="products-grid">
           {featured.map((p) => (
-            <Link key={p._id} to={`/product/${p._id}`} className="product-card card-hover">
+            <Link key={p.id} to={`/product/${p.id}`} className="product-card card-hover">
               <div className="product-img">
                 <img src={p.images?.[0] || '/placeholder.jpg'} alt={p.name} />
-                {p.discountedPrice && <span className="badge">Sale</span>}
+                {(p.discounted_price || p.discountedPrice) && <span className="badge">Sale</span>}
               </div>
               <div className="product-info">
                 <h3>{p.name}</h3>
                 <div className="price">
-                  {p.discountedPrice ? (
-                    <><span className="old">₹{p.price}</span> <span>₹{p.discountedPrice}</span></>
+                  {(p.discounted_price || p.discountedPrice) ? (
+                    <><span className="old">₹{p.price}</span> <span>₹{p.discounted_price || p.discountedPrice}</span></>
                   ) : (
                     <span>₹{p.price}</span>
                   )}

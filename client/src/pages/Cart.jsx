@@ -32,7 +32,10 @@ export default function Cart() {
   if (loading) return <div className="container"><p>Loading cart...</p></div>;
 
   const items = cart?.items || [];
-  const subtotal = items.reduce((sum, i) => sum + (i.product?.discountedPrice ?? i.product?.price) * i.quantity, 0);
+  const subtotal = items.reduce((sum, i) => {
+    const price = i.products?.discounted_price || i.products?.discountedPrice || i.products?.price || 0;
+    return sum + price * (i.quantity || 0);
+  }, 0);
 
   if (items.length === 0) {
     return (
@@ -52,21 +55,21 @@ export default function Cart() {
       <div className="cart-layout">
         <div className="cart-items">
           {items.map((item) => {
-            const p = item.product;
-            const price = p?.discountedPrice ?? p?.price;
+            const p = item.products || item.product;
+            const price = p?.discounted_price || p?.discountedPrice || p?.price;
             return (
-              <div key={item._id} className="cart-item">
+              <div key={item.id} className="cart-item">
                 <img src={p?.images?.[0]} alt={p?.name} />
                 <div className="cart-item-info">
                   <h3>{p?.name}</h3>
                   <p>Size: {item.size} | ₹{price} each</p>
                   <div className="cart-item-actions">
                     <div className="qty-control">
-                      <button onClick={() => updateQty(item._id, Math.max(1, item.quantity - 1))}>−</button>
+                      <button onClick={() => updateQty(item.id, Math.max(1, item.quantity - 1))}>−</button>
                       <span>{item.quantity}</span>
-                      <button onClick={() => updateQty(item._id, item.quantity + 1)}>+</button>
+                      <button onClick={() => updateQty(item.id, item.quantity + 1)}>+</button>
                     </div>
-                    <button className="remove-btn" onClick={() => removeItem(item._id)}>Remove</button>
+                    <button className="remove-btn" onClick={() => removeItem(item.id)}>Remove</button>
                   </div>
                 </div>
                 <div className="cart-item-price">₹{price * item.quantity}</div>

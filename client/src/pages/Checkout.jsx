@@ -18,11 +18,19 @@ export default function Checkout() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    authAPI.me().then((u) => {
-      setUser(u);
-      setAddresses(u.addresses || []);
-      const def = (u.addresses || []).find((a) => a.isDefault);
-      setSelectedAddress(def?._id || (u.addresses?.[0]?._id) || '');
+    authAPI.getMe().then((u) => {
+      // u is { ...user, profile } from Supabase migration
+      const userData = {
+        id: u.id,
+        email: u.email,
+        role: u.profile?.role || 'user',
+        name: u.profile?.name || u.user_metadata?.name,
+        addresses: u.profile?.addresses || []
+      };
+      setUser(userData);
+      setAddresses(userData.addresses);
+      const def = userData.addresses.find((a) => a.isDefault);
+      setSelectedAddress(def?.id || def?._id || (userData.addresses?.[0]?.id || userData.addresses?.[0]?._id) || '');
     }).catch(() => navigate('/login'));
   }, [navigate]);
 
@@ -37,15 +45,25 @@ export default function Checkout() {
       handler: async (response) => {
         setLoading(true);
         try {
-          await orderAPI.confirmPayment(
-            orderData.transaction.transactionId,
-            response.razorpay_payment_id,
-            response.razorpay_order_id,
-            response.razorpay_signature
-          );
+          const txn = orderData.transaction || {};
+          const tId = txn.transaction_id || txn.transactionId || txn.id;
+
+          console.log('[PAYMENT-DEBUG] Order Data:', orderData);
+          console.log('[PAYMENT-DEBUG] Extracted Txn ID:', tId);
+          console.log('[PAYMENT-DEBUG] Razorpay Response:', response);
+
+          await orderAPI.confirmPayment({
+            transactionId: tId,
+            transaction_id: tId,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_signature: response.razorpay_signature,
+            isDemo: false
+          });
           setOrder(orderData);
           setStep('success');
         } catch (err) {
+          console.error('[PAYMENT-DEBUG] Confirm Payment Failed:', err);
           alert('Payment verification failed: ' + err.message);
         } finally {
           setLoading(false);
@@ -108,10 +126,21 @@ export default function Checkout() {
   const [paymentMethod, setPaymentMethod] = useState('');
 
   const handleDemoPayment = async (method) => {
-    if (!order?.transaction?.transactionId) return;
+    const tId = order?.transaction?.transaction_id || order?.transaction?.transactionId || order?.transaction?.id;
+    if (!tId) {
+      alert('Error: Transaction ID missing. Please try placing your order again.');
+      return;
+    }
+
     setLoading(true);
     try {
-      await orderAPI.confirmPayment(order.transaction.transactionId, null, null, null, true, method);
+      await orderAPI.confirmPayment({
+        transactionId: tId,
+        transaction_id: tId, // Send both
+        paymentMethod: method,
+        isDemo: true
+      });
+      setPaymentMethod(method);
       setStep('success');
     } catch (err) {
       alert('Payment failed: ' + err.message);
@@ -126,8 +155,8 @@ export default function Checkout() {
         <div className="checkout-success">
           <div className="success-icon">✅</div>
           <h1>Order Placed Successfully!</h1>
-          <p>Order ID: <strong>{order?.order?.orderId}</strong></p>
-          <p>Payment Mode: <strong>{order?.transaction?.paymentMethod || paymentMethod}</strong></p>
+          <p>Order ID: <strong>{order?.order?.order_id || order?.order?.orderId}</strong></p>
+          <p>Payment Mode: <strong>{order?.transaction?.payment_method || order?.transaction?.paymentMethod || paymentMethod}</strong></p>
           <p className="delivery-note">Your beautiful outfit will reach you soon!</p>
           <div className="success-actions">
             <button className="btn btn-gold" onClick={() => generateInvoice(order.order, order.transaction)}>
@@ -155,8 +184,8 @@ export default function Checkout() {
           ) : (
             <div className="address-list">
               {addresses.map((a) => (
-                <label key={a._id} className={`address-option card-hover ${selectedAddress === a._id ? 'selected' : ''}`}>
-                  <input type="radio" name="addr" value={a._id} checked={selectedAddress === a._id} onChange={() => setSelectedAddress(a._id)} />
+                <label key={a.id || a._id} className={`address-option card-hover ${(selectedAddress === a.id || selectedAddress === a._id) ? 'selected' : ''}`}>
+                  <input type="radio" name="addr" value={a.id || a._id} checked={selectedAddress === a.id || selectedAddress === a._id} onChange={() => setSelectedAddress(a.id || a._id)} />
                   <div className="addr-details">
                     <strong>{a.name}</strong> <span className="phone">{a.phone}</span><br />
                     <p>{a.addressLine1}, {a.city}, {a.state} - {a.pincode}</p>
@@ -179,11 +208,11 @@ export default function Checkout() {
             <h3>Order Summary</h3>
             <div className="summary-row">
               <span>Order ID:</span>
-              <strong>{order.order?.orderId}</strong>
+              <strong>{order.order?.order_id || order.order?.orderId}</strong>
             </div>
             <div className="summary-row total">
               <span>Amount to Pay:</span>
-              <strong>₹{order.order?.subtotal}</strong>
+              <strong>₹{order.order?.total_amount || order.order?.subtotal}</strong>
             </div>
           </div>
 
@@ -204,7 +233,7 @@ export default function Checkout() {
               <div className="upi-payment text-center">
                 <h3>Scan to Pay</h3>
                 <div className="qr-container">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=aadaiudai@upi&pn=AADAIUDAI&am=${order.order?.subtotal}&cu=INR`} alt="QR Code" />
+                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=aadaiudai@upi&pn=AADAIUDAI&am=${order.order?.total_amount || order.order?.subtotal}&cu=INR`} alt="QR Code" />
                 </div>
                 <p>Scan this QR using Google Pay, PhonePe, or Any UPI App</p>
                 <button className="btn btn-gold" onClick={() => handleDemoPayment('UPI')} disabled={loading}>
@@ -225,7 +254,7 @@ export default function Checkout() {
                   <input className="input" placeholder="Name on Card" />
                 </div>
                 <button className="btn btn-gold w-100" onClick={() => handleDemoPayment('Card')} disabled={loading}>
-                  {loading ? 'Processing...' : `Pay ₹${order.order?.subtotal}`}
+                  {loading ? 'Processing...' : `Pay ₹${order.order?.total_amount || order.order?.subtotal}`}
                 </button>
               </div>
             )}

@@ -52,17 +52,17 @@ export default function Collections() {
           ) : (
             <div className="products-grid">
               {products.map((p) => (
-                <Link key={p._id} to={`/product/${p._id}`} className="product-card">
+                <Link key={p.id} to={`/product/${p.id}`} className="product-card">
                   <div className="product-img">
                     <img src={p.images?.[0] || 'https://via.placeholder.com/300'} alt={p.name} />
-                    {p.discountedPrice && <span className="badge">Sale</span>}
+                    {(p.discounted_price || p.discountedPrice) && <span className="badge">Sale</span>}
                     {p.stock === 0 && <span className="badge out">Out of Stock</span>}
                   </div>
                   <div className="product-info">
                     <h3>{p.name}</h3>
                     <div className="price">
-                      {p.discountedPrice ? (
-                        <><span className="old">₹{p.price}</span> <span>₹{p.discountedPrice}</span></>
+                      {(p.discount_price || p.discountedPrice || p.discounted_price) ? (
+                        <><span className="old">₹{p.price}</span> <span>₹{p.discounted_price || p.discountedPrice}</span></>
                       ) : (
                         <span>₹{p.price}</span>
                       )}

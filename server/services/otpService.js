@@ -48,21 +48,25 @@ const sendOTPEmail = async (email, otp) => {
   const mailOptions = {
     from: `"AADAIUDAI" <${fromEmail}>`,
     to: email,
-    subject: 'Your AADAIUDAI Verification Code',
+    subject: `🔐 ${otp} is your AADAIUDAI verification code`,
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #8b1538, #6b0f2a); padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: #fff; margin: 0; font-size: 24px;">AADAIUDAI</h1>
-          <p style="color: #e8d48b; margin: 5px 0 0;">Indian Ethnic Dress Shop</p>
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9f9f9; padding: 20px; border-radius: 12px;">
+        <div style="text-align: center; padding: 20px 0;">
+          <h1 style="color: #8b1538; margin: 0; font-size: 28px; letter-spacing: 2px;">AADAIUDAI</h1>
+          <p style="color: #666; font-style: italic;">Premium Indian Ethnic Wear</p>
         </div>
-        <div style="background: #fff; padding: 30px; border: 1px solid #ddd; border-top: none; border-radius: 0 0 10px 10px;">
-          <h2 style="color: #8b1538; margin-top: 0;">Verification Code</h2>
-          <p style="color: #555;">Your one-time password (OTP) for login is:</p>
-          <div style="background: #f5e6d3; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
-            <span style="font-size: 32px; font-weight: bold; color: #8b1538; letter-spacing: 8px;">${otp}</span>
+        <div style="background-color: #ffffff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+          <h2 style="color: #333; margin-top: 0; text-align: center;">Verify Your Identity</h2>
+          <p style="color: #555; line-height: 1.6; text-align: center;">To access your account and complete your purchase, please use the following one-time password:</p>
+          <div style="background: #fff5f5; border: 2px dashed #8b1538; padding: 20px; text-align: center; border-radius: 10px; margin: 30px 0;">
+            <span style="font-size: 36px; font-weight: bold; color: #8b1538; letter-spacing: 12px; font-family: monospace;">${otp}</span>
           </div>
-          <p style="color: #555;">This code is valid for <strong>5 minutes</strong>.</p>
-          <p style="color: #888; font-size: 12px; margin-top: 20px;">If you didn't request this code, please ignore this email.</p>
+          <p style="color: #777; font-size: 14px; text-align: center;">This code will expire in <strong>5 minutes</strong> for your security.</p>
+          <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">If you did not request this code, please ignore this email or contact support if you have concerns.</p>
+        </div>
+        <div style="text-align: center; padding-top: 20px; color: #aaa; font-size: 12px;">
+          &copy; 2026 AADAIUDAI. All rights reserved.
         </div>
       </div>
     `,

@@ -16,14 +16,16 @@ export function AuthProvider({ children }) {
       return;
     }
     try {
-      const data = await authAPI.me();
-      setUser(data);
-      sessionStorage.setItem('user', JSON.stringify({ 
-        id: data._id, 
-        email: data.email, 
-        role: data.role, 
-        name: data.name 
-      }));
+      const data = await authAPI.getMe();
+      // data is { ...user, profile: { ... } }
+      const userData = {
+        id: data.id,
+        email: data.email,
+        role: data.profile?.role || 'user',
+        name: data.profile?.name || data.user_metadata?.name
+      };
+      setUser(userData);
+      sessionStorage.setItem('user', JSON.stringify(userData));
     } catch {
       localStorage.removeItem('token');
       sessionStorage.removeItem('user');
@@ -46,7 +48,7 @@ export function AuthProvider({ children }) {
   const logout = async () => {
     try {
       await authAPI.logout();
-    } catch {}
+    } catch { }
     localStorage.removeItem('token');
     sessionStorage.removeItem('user');
     setUser(null);

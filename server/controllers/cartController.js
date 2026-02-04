@@ -1,17 +1,18 @@
-const Cart = require('../models/Cart');
-const Product = require('../models/Product');
+const { supabaseAdmin } = require('../config/supabase');
 
-const getCart = async (userId) => {
-  let cart = await Cart.findOne({ user: userId }).populate('items.product');
-  if (!cart) {
-    cart = await Cart.create({ user: userId, items: [] });
-  }
-  return cart;
+const getCartData = async (userId) => {
+  const { data: items, error } = await supabaseAdmin
+    .from('cart_items')
+    .select('*, products(*)')
+    .eq('user_id', userId);
+
+  if (error) throw error;
+  return { items: items || [] };
 };
 
 exports.get = async (req, res) => {
   try {
-    const cart = await getCart(req.user._id);
+    const cart = await getCartData(req.user.id);
     res.json(cart);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch cart' });
@@ -21,45 +22,85 @@ exports.get = async (req, res) => {
 exports.add = async (req, res) => {
   try {
     const { productId, quantity = 1, size } = req.body;
-    const product = await Product.findById(productId);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    // Check product existence and stock
+    const { data: product, error: pError } = await supabaseAdmin
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+
+    if (pError || !product) return res.status(404).json({ error: 'Product not found' });
     if (!product.sizes.includes(size)) return res.status(400).json({ error: 'Invalid size' });
     if (product.stock < quantity) return res.status(400).json({ error: 'Insufficient stock' });
 
-    let cart = await Cart.findOne({ user: req.user._id });
-    if (!cart) cart = await Cart.create({ user: req.user._id, items: [] });
+    // Check if item already exists in cart
+    const { data: existing } = await supabaseAdmin
+      .from('cart_items')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .eq('product_id', productId)
+      .eq('size', size)
+      .single();
 
-    const existing = cart.items.find(i => i.product.toString() === productId && i.size === size);
     if (existing) {
-      existing.quantity += quantity;
-      if (existing.quantity > product.stock) return res.status(400).json({ error: 'Insufficient stock' });
+      const newQty = existing.quantity + quantity;
+      if (newQty > product.stock) return res.status(400).json({ error: 'Insufficient stock' });
+
+      const { error: uError } = await supabaseAdmin
+        .from('cart_items')
+        .update({ quantity: newQty })
+        .eq('id', existing.id);
+
+      if (uError) throw uError;
     } else {
-      cart.items.push({ product: productId, quantity, size });
+      const { error: iError } = await supabaseAdmin
+        .from('cart_items')
+        .insert([{ user_id: req.user.id, product_id: productId, quantity, size }]);
+
+      if (iError) throw iError;
     }
-    cart.updatedAt = new Date();
-    await cart.save();
-    const populated = await Cart.findById(cart._id).populate('items.product');
-    res.json(populated);
+
+    const cart = await getCartData(req.user.id);
+    res.json(cart);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to add to cart' });
+    console.error('Add to Cart Error:', err);
+    res.status(500).json({ error: 'Failed to add to cart: ' + (err.message || err.error_description) });
   }
 };
 
 exports.update = async (req, res) => {
   try {
     const { itemId, quantity } = req.body;
-    const cart = await Cart.findOne({ user: req.user._id }).populate('items.product');
-    if (!cart) return res.status(404).json({ error: 'Cart not found' });
-    const item = cart.items.id(itemId);
-    if (!item) return res.status(404).json({ error: 'Item not found' });
+
     if (quantity <= 0) {
-      cart.items.pull(itemId);
+      const { error } = await supabaseAdmin
+        .from('cart_items')
+        .delete()
+        .eq('id', itemId)
+        .eq('user_id', req.user.id);
+      if (error) throw error;
     } else {
-      if (item.product.stock < quantity) return res.status(400).json({ error: 'Insufficient stock' });
-      item.quantity = quantity;
+      // Check stock
+      const { data: item } = await supabaseAdmin
+        .from('cart_items')
+        .select('*, products(stock)')
+        .eq('id', itemId)
+        .eq('user_id', req.user.id)
+        .single();
+
+      if (!item) return res.status(404).json({ error: 'Item not found' });
+      if (item.products.stock < quantity) return res.status(400).json({ error: 'Insufficient stock' });
+
+      const { error } = await supabaseAdmin
+        .from('cart_items')
+        .update({ quantity })
+        .eq('id', itemId)
+        .eq('user_id', req.user.id);
+      if (error) throw error;
     }
-    cart.updatedAt = new Date();
-    await cart.save();
+
+    const cart = await getCartData(req.user.id);
     res.json(cart);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update cart' });
@@ -68,13 +109,16 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const cart = await Cart.findOne({ user: req.user._id });
-    if (!cart) return res.status(404).json({ error: 'Cart not found' });
-    cart.items.pull(req.params.id);
-    cart.updatedAt = new Date();
-    await cart.save();
-    const populated = await Cart.findById(cart._id).populate('items.product');
-    res.json(populated);
+    const { error } = await supabase
+      .from('cart_items')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('user_id', req.user.id);
+
+    if (error) throw error;
+
+    const cart = await getCartData(req.user.id);
+    res.json(cart);
   } catch (err) {
     res.status(500).json({ error: 'Failed to remove item' });
   }

@@ -1,33 +1,57 @@
-const API = '/api';
+const API = (window.location.protocol === 'file:' || window.electronAPI)
+  ? 'http://127.0.0.1:5001/api'
+  : '/api';
 
 const getToken = () => localStorage.getItem('token');
 
+/**
+ * Clean Request Handler
+ * Definitive fix for Error: {}
+ */
 const request = async (path, options = {}) => {
   const token = getToken();
+
+  // LOG EVERYTHING LOUDLY
+  console.log(`[API-CLIENT] Calling: ${path}`);
+  console.log('[API-CLIENT] Token Status:', token ? 'Bearer present' : 'MISSING');
+
   const headers = {
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
 
-  // Don't set Content-Type for FormData (browser sets it with boundary)
   if (!(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API}${path}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+  if (options.body) {
+    console.log('[API-CLIENT] Body:', options.body);
+  }
+
+  try {
+    const res = await fetch(`${API}${path}`, { ...options, headers });
+    const data = await res.json().catch(() => ({}));
+
+    console.log(`[API-CLIENT] Status: ${res.status}`, data);
+
+    if (!res.ok) {
+      const msg = data.error || data.message || JSON.stringify(data);
+      throw new Error(msg === '{}' ? `Request Failed (${res.status})` : msg);
+    }
+    return data;
+  } catch (err) {
+    if (err.name === 'TypeError') {
+      throw new Error('Connection Error: Is the backend server running?');
+    }
+    throw err;
+  }
 };
 
 export const authAPI = {
-  sendOTP: (email) => request('/auth/send-otp', { method: 'POST', body: JSON.stringify({ email }) }),
-  verifyOTP: (email, otp) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) }),
-  me: () => request('/auth/me'),
+  register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  login: (credentials) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
+  verifyOTP: (data) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify(data) }),
+  getMe: () => request('/auth/me'),
   logout: () => request('/auth/logout', { method: 'POST' }),
 };
 
@@ -58,13 +82,9 @@ export const cartAPI = {
 export const orderAPI = {
   createFromCart: (addressId) => request('/orders/from-cart', { method: 'POST', body: JSON.stringify({ addressId }) }),
   createBuyNow: (data) => request('/orders/buy-now', { method: 'POST', body: JSON.stringify(data) }),
-  confirmPayment: (transactionId, razorpayPaymentId, razorpayOrderId, razorpaySignature, isDemo = false, paymentMethod = 'Razorpay') =>
-    request('/orders/confirm-payment', {
-      method: 'POST',
-      body: JSON.stringify({ transactionId, razorpayPaymentId, razorpayOrderId, razorpaySignature, isDemo, paymentMethod })
-    }),
+  confirmPayment: (payload) => request('/orders/confirm-payment', { method: 'POST', body: JSON.stringify(payload) }),
   getOrder: (id) => request(`/orders/${id}`),
-  getOrderByTxn: (orderId) => request(`/orders/${orderId}/transaction`),
+  getOrderByTxn: (id) => request(`/orders/${id}/transaction`),
 };
 
 export const reviewAPI = {
@@ -75,24 +95,19 @@ export const reviewAPI = {
 
 export const adminAPI = {
   dashboard: () => request('/admin/dashboard'),
-  // Users
   getUsers: () => request('/admin/users'),
   getUserById: (id) => request(`/admin/users/${id}`),
   updateUser: (id, data) => request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
-  // Products
   getProducts: () => request('/admin/products'),
   createProduct: (formData) => request('/admin/products', { method: 'POST', body: formData }),
   updateProduct: (id, formData) => request(`/admin/products/${id}`, { method: 'PATCH', body: formData }),
   updateStock: (id, stock) => request(`/admin/products/${id}/stock`, { method: 'PATCH', body: JSON.stringify({ stock }) }),
   deleteProduct: (id) => request(`/admin/products/${id}`, { method: 'DELETE' }),
-  // Orders
   getOrders: () => request('/admin/orders'),
   getOrderById: (id) => request(`/admin/orders/${id}`),
   updateOrderStatus: (id, status) => request(`/admin/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  // Transactions
   getTransactions: () => request('/admin/transactions'),
-  // Reviews
   getReviews: () => request('/admin/reviews'),
   approveReview: (id, isApproved) => request(`/admin/reviews/${id}`, { method: 'PATCH', body: JSON.stringify({ isApproved }) }),
   deleteReview: (id) => request(`/admin/reviews/${id}`, { method: 'DELETE' }),

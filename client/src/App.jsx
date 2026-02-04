@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import About from './pages/About';
@@ -12,6 +12,7 @@ import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import Transactions from './pages/Transactions';
+import Register from './pages/Register';
 import Admin from './pages/Admin';
 
 function Protected({ children }) {
@@ -30,12 +31,13 @@ function AdminRoute({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="about" element={<About />} />
           <Route path="login" element={<Login />} />
+          <Route path="register" element={<Register />} />
           <Route path="admin/login" element={<AdminLogin />} />
           <Route path="collections" element={<Collections />} />
           <Route path="collections/:category" element={<Collections />} />
@@ -48,6 +50,6 @@ export default function App() {
           <Route path="admin/*" element={<AdminRoute><Admin /></AdminRoute>} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

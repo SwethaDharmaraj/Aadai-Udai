@@ -1,6 +1,4 @@
-const User = require('../models/User');
-const Order = require('../models/Order');
-const Transaction = require('../models/Transaction');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const { body, validationResult } = require('express-validator');
 
 exports.updateProfile = [
@@ -13,14 +11,30 @@ exports.updateProfile = [
         return res.status(400).json({ errors: errors.array() });
       }
       const { name, phone } = req.body;
-      const user = await User.findByIdAndUpdate(
-        req.user._id,
-        { ...(name !== undefined && { name }), ...(phone !== undefined && { phone }) },
-        { new: true }
-      ).select('-__v');
-      res.json(user);
+      const updates = { id: req.user.id, updated_at: new Date() };
+      if (name !== undefined) updates.name = name;
+      if (phone !== undefined) updates.phone = phone;
+
+      // Check if profile exists first to decide between update or insert (to preserve other fields on update)
+      const { data: existing } = await supabaseAdmin.from('profiles').select('id').eq('id', req.user.id).single();
+
+      let query;
+      if (existing) {
+        query = supabaseAdmin.from('profiles').update(updates).eq('id', req.user.id);
+      } else {
+        // New profile, ensure defaults
+        updates.role = 'user';
+        updates.addresses = [];
+        query = supabaseAdmin.from('profiles').insert(updates);
+      }
+
+      const { data, error } = await query.select().single();
+
+      if (error) throw error;
+      res.json(data);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to update profile' });
+      console.error('Update Profile Error:', err);
+      res.status(500).json({ error: 'Failed to update profile: ' + (err.message || err.error_description) });
     }
   }
 ];
@@ -40,16 +54,51 @@ exports.addAddress = [
       if (!errors.isEmpty()) {
         return res.status(400).json({ errors: errors.array() });
       }
-      const user = await User.findById(req.user._id);
-      const addr = { ...req.body };
-      if (addr.isDefault) {
-        user.addresses.forEach(a => a.isDefault = false);
+
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*') // Get all fields to preserve them if we fall back to upsert, but update is safer
+        .eq('id', req.user.id)
+        .single();
+
+      let addresses = profile?.addresses || [];
+      const newAddr = { ...req.body, id: Date.now().toString() };
+
+      if (newAddr.isDefault) {
+        addresses.forEach(a => a.isDefault = false);
       }
-      user.addresses.push(addr);
-      await user.save();
-      res.json(user.addresses);
+      addresses.push(newAddr);
+
+      let data, error;
+
+      if (profile) {
+        // Safe Update
+        ({ data, error } = await supabaseAdmin
+          .from('profiles')
+          .update({ addresses })
+          .eq('id', req.user.id)
+          .select()
+          .single());
+      } else {
+        // Create new profile if missing
+        ({ data, error } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: req.user.id,
+            addresses,
+            role: 'user',
+            name: req.user.user_metadata?.name || '',
+            phone: req.user.user_metadata?.phone || ''
+          })
+          .select()
+          .single());
+      }
+
+      if (error) throw error;
+      res.json(data.addresses);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to add address' });
+      console.error('Add Address Error:', err);
+      res.status(500).json({ error: 'Failed to add address: ' + (err.message || err.error_description) });
     }
   }
 ];
@@ -67,39 +116,77 @@ exports.updateAddress = [
   async (req, res) => {
     try {
       const { addressId, ...updates } = req.body;
-      const user = await User.findById(req.user._id);
-      const addr = user.addresses.id(addressId);
-      if (!addr) return res.status(404).json({ error: 'Address not found' });
-      Object.assign(addr, updates);
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('addresses')
+        .eq('id', req.user.id)
+        .single();
+
+      if (!profile) return res.status(404).json({ error: 'Profile not found. Please update your profile details first.' });
+
+      let addresses = profile.addresses || [];
+      const index = addresses.findIndex(a => a.id === addressId || a._id === addressId);
+      if (index === -1) return res.status(404).json({ error: 'Address not found' });
+
+      addresses[index] = { ...addresses[index], ...updates };
       if (updates.isDefault) {
-        user.addresses.forEach(a => a.isDefault = false);
-        addr.isDefault = true;
+        addresses.forEach((a, i) => { if (i !== index) a.isDefault = false; });
+        addresses[index].isDefault = true;
       }
-      await user.save();
-      res.json(user.addresses);
+
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .update({ addresses })
+        .eq('id', req.user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json(data.addresses);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to update address' });
+      console.error('Update Address Error:', err);
+      res.status(500).json({ error: 'Failed to update address: ' + (err.message || err.error_description) });
     }
   }
 ];
 
 exports.deleteAddress = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    user.addresses.pull(req.params.id);
-    await user.save();
-    res.json(user.addresses);
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('addresses')
+      .eq('id', req.user.id)
+      .single();
+
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    let addresses = (profile.addresses || []).filter(a => a.id !== req.params.id && a._id !== req.params.id);
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .update({ addresses })
+      .eq('id', req.user.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data.addresses);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to delete address' });
+    console.error('Delete Address Error:', err);
+    res.status(500).json({ error: 'Failed to delete address: ' + (err.message || err.error_description) });
   }
 };
 
 exports.getOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ user: req.user._id })
-      .populate('items.product', 'name images')
-      .sort({ createdAt: -1 });
-    res.json(orders);
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*, order_items(*, products(*))')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch orders' });
   }
@@ -107,10 +194,14 @@ exports.getOrders = async (req, res) => {
 
 exports.getTransactions = async (req, res) => {
   try {
-    const txns = await Transaction.find({ user: req.user._id })
-      .populate('order')
-      .sort({ createdAt: -1 });
-    res.json(txns);
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*, orders(*)')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch transactions' });
   }

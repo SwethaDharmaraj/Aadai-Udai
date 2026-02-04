@@ -13,11 +13,12 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authAPI.me()
+    authAPI.getMe()
       .then((data) => {
+        const userData = data.profile || data;
         setProfile(data);
-        setName(data?.name || '');
-        setPhone(data?.phone || '');
+        setName(userData?.name || '');
+        setPhone(userData?.phone || '');
       })
       .catch(() => { })
       .finally(() => setLoading(false));
@@ -27,7 +28,7 @@ export default function Profile() {
     e.preventDefault();
     try {
       await userAPI.updateProfile({ name, phone });
-      setProfile({ ...profile, name, phone });
+      setProfile({ ...profile, profile: { ...profile.profile, name, phone } });
       setEditing(false);
       refreshUser();
     } catch (err) {
@@ -36,6 +37,8 @@ export default function Profile() {
   };
 
   if (loading) return <div className="container"><p>Loading...</p></div>;
+
+  const currentProfile = profile?.profile || profile;
 
   return (
     <div className="profile-page container">
@@ -58,8 +61,8 @@ export default function Profile() {
         ) : (
           <>
             <p><strong>Email:</strong> {profile?.email}</p>
-            <p><strong>Name:</strong> {profile?.name || '-'}</p>
-            <p><strong>Phone:</strong> {profile?.phone || '-'}</p>
+            <p><strong>Name:</strong> {currentProfile?.name || '-'}</p>
+            <p><strong>Phone:</strong> {currentProfile?.phone || '-'}</p>
             <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit Profile</button>
           </>
         )}
@@ -70,7 +73,7 @@ export default function Profile() {
         <Link to="/transactions" className="profile-link">Transaction History</Link>
       </div>
 
-      <AddressManager onUpdate={() => authAPI.me().then(setProfile)} />
+      <AddressManager onUpdate={() => authAPI.getMe().then(setProfile)} />
     </div>
   );
 }
@@ -84,7 +87,7 @@ function AddressManager({ onUpdate }) {
   });
 
   useEffect(() => {
-    authAPI.me().then((u) => setAddresses(u?.addresses || [])).catch(() => { });
+    authAPI.getMe().then((u) => setAddresses(u?.profile?.addresses || u?.addresses || [])).catch(() => { });
   }, []);
 
   const handleSubmit = async (e) => {
@@ -111,7 +114,7 @@ function AddressManager({ onUpdate }) {
       name: a.name, phone: a.phone, addressLine1: a.addressLine1, addressLine2: a.addressLine2,
       city: a.city, state: a.state, pincode: a.pincode, isDefault: a.isDefault
     });
-    setEditingId(a._id);
+    setEditingId(a.id);
     setShowForm(true);
   };
 
@@ -141,14 +144,14 @@ function AddressManager({ onUpdate }) {
       <h2>Delivery Addresses</h2>
       <div className="address-grid">
         {addresses.map((a) => (
-          <div key={a._id} className={`address-item ${a.isDefault ? 'default' : ''}`}>
+          <div key={a.id} className={`address-item ${a.isDefault ? 'default' : ''}`}>
             {a.isDefault && <span className="badge">Default</span>}
             <p><strong>{a.name}</strong> {a.phone}</p>
             <p>{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.state} - {a.pincode}</p>
             <div className="address-actions">
               <button className="btn-link" onClick={() => handleEdit(a)}>Edit</button>
-              <button className="btn-link" onClick={() => handleDelete(a._id)}>Remove</button>
-              {!a.isDefault && <button className="btn-link" onClick={() => handleSetDefault(a._id)}>Set as Default</button>}
+              <button className="btn-link" onClick={() => handleDelete(a.id)}>Remove</button>
+              {!a.isDefault && <button className="btn-link" onClick={() => handleSetDefault(a.id)}>Set as Default</button>}
             </div>
           </div>
         ))}

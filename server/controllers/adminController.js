@@ -1,64 +1,80 @@
-const User = require('../models/User');
-const Order = require('../models/Order');
-const Transaction = require('../models/Transaction');
-const Product = require('../models/Product');
-const Review = require('../models/Review');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 const fs = require('fs');
 const path = require('path');
 
 // Dashboard with comprehensive stats
 exports.dashboard = async (req, res) => {
   try {
-    const [userCount, productCount, orderCount, txnCount, reviewCount, totalSales, lowStock, pendingReviews] = await Promise.all([
-      User.countDocuments({ role: 'user' }),
-      Product.countDocuments(),
-      Order.countDocuments(),
-      Transaction.countDocuments(),
-      Review.countDocuments(),
-      Transaction.aggregate([{ $match: { paymentStatus: 'success' } }, { $group: { _id: null, total: { $sum: '$amount' } } }]),
-      Product.countDocuments({ stock: { $lt: 10 } }),
-      Review.countDocuments({ isApproved: false })
-    ]);
+    const { data: usersCount } = await supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user');
+    const { data: productsCount } = await supabaseAdmin.from('products').select('id', { count: 'exact', head: true });
+    const { data: ordersCount } = await supabaseAdmin.from('orders').select('id', { count: 'exact', head: true });
 
-    const recentOrders = await Order.find().populate('user', 'email name').sort({ createdAt: -1 }).limit(5);
-    const lowStockProducts = await Product.find({ stock: { $lt: 10 } }).select('name stock category').limit(10);
+    // Recent orders
+    const { data: recentOrders } = await supabaseAdmin
+      .from('orders')
+      .select('*, profiles(email, name)')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
     res.json({
-      users: userCount,
-      products: productCount,
-      orders: orderCount,
-      transactions: txnCount,
-      reviews: reviewCount,
-      totalSales: totalSales[0]?.total || 0,
-      lowStockCount: lowStock,
-      pendingReviews,
-      recentOrders,
-      lowStockProducts
+      users: usersCount?.length || 0,
+      products: productsCount?.length || 0,
+      orders: ordersCount?.length || 0,
+      recentOrders
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch dashboard' });
+    console.error('Dashboard Error:', err);
+    res.status(500).json({ error: `Failed to fetch dashboard: ${err.message}` });
   }
 };
 
 // ============ USER MANAGEMENT ============
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-__v').sort({ createdAt: -1 });
-    res.json(users);
+    // Get profiles from database
+    const { data: profiles, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (profileError) throw profileError;
+
+    // Get all users from Supabase Auth to get emails
+    const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+
+    if (authError) {
+      console.error('Error fetching auth users:', authError);
+      // Return profiles without emails if auth fetch fails
+      return res.json(profiles);
+    }
+
+    // Create a map of user IDs to emails
+    const emailMap = {};
+    users.forEach(user => {
+      emailMap[user.id] = user.email;
+    });
+
+    // Merge emails into profiles
+    const usersWithEmails = profiles.map(profile => ({
+      ...profile,
+      email: emailMap[profile.id] || profile.email || 'N/A'
+    }));
+
+    res.json(usersWithEmails);
   } catch (err) {
+    console.error('Get users error:', err);
     res.status(500).json({ error: 'Failed to fetch users' });
   }
 };
 
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-__v');
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { data: user, error } = await supabaseAdmin.from('profiles').select('*').eq('id', req.params.id).single();
+    if (error) return res.status(404).json({ error: 'User not found' });
 
-    const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 });
-    const reviews = await Review.find({ user: user._id }).populate('product', 'name');
+    const { data: orders } = await supabaseAdmin.from('orders').select('*').eq('user_id', req.params.id).order('created_at', { ascending: false });
 
-    res.json({ user, orders, reviews });
+    res.json({ user, orders });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
@@ -66,14 +82,9 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   try {
-    const { name, phone, role, isActive } = req.body;
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { name, phone, role, isActive },
-      { new: true }
-    ).select('-__v');
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
+    const { data, error } = await supabaseAdmin.from('profiles').update(req.body).eq('id', req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update user' });
   }
@@ -81,8 +92,8 @@ exports.updateUser = async (req, res) => {
 
 exports.deleteUser = async (req, res) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    const { error } = await supabaseAdmin.from('profiles').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ message: 'User deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete user' });
@@ -92,8 +103,9 @@ exports.deleteUser = async (req, res) => {
 // ============ PRODUCT MANAGEMENT ============
 exports.getProducts = async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
-    res.json(products);
+    const { data, error } = await supabaseAdmin.from('products').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch products' });
   }
@@ -102,124 +114,150 @@ exports.getProducts = async (req, res) => {
 exports.createProduct = async (req, res) => {
   try {
     const { name, description, category, subCategory, price, discountedPrice, sizes, stock, featured } = req.body;
+    let variantStock = {};
+    try {
+      if (req.body.variantStock) variantStock = JSON.parse(req.body.variantStock);
+    } catch (e) { console.error('Error parsing variantStock', e); }
 
-    // Handle uploaded images
     let images = [];
     if (req.files && req.files.length > 0) {
-      images = req.files.map(f => `/uploads/products/${f.filename}`);
+      for (const file of req.files) {
+        const fileName = `${Date.now()}-${file.originalname}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from('products')
+          .upload(fileName, fs.readFileSync(file.path), {
+            contentType: file.mimetype
+          });
+
+        if (error) {
+          console.error('Upload error:', error);
+          continue;
+        }
+
+        const { data: urlData } = supabaseAdmin.storage.from('products').getPublicUrl(fileName);
+        images.push(urlData.publicUrl);
+      }
     } else if (req.body.images) {
-      // Handle URL-based images
       images = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
     }
 
-    const product = await Product.create({
-      name,
-      description,
-      category,
-      subCategory,
-      price: parseFloat(price),
-      discountedPrice: discountedPrice ? parseFloat(discountedPrice) : null,
-      sizes: typeof sizes === 'string' ? sizes.split(',').map(s => s.trim()) : sizes,
-      stock: parseInt(stock) || 0,
-      featured: featured === 'true' || featured === true,
-      images
-    });
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .insert([
+        {
+          name,
+          description,
+          category,
+          sub_category: subCategory,
+          price: parseFloat(price),
+          discounted_price: discountedPrice ? parseFloat(discountedPrice) : null,
+          sizes: typeof sizes === 'string' ? sizes.split(',').map(s => s.trim()) : sizes,
+          sizes: typeof sizes === 'string' ? sizes.split(',').map(s => s.trim()) : sizes,
+          stock: parseInt(stock) || 0,
+          variant_stock: variantStock,
+          featured: featured === 'true' || featured === true,
+          images
+        }
+      ])
+      .select();
 
-    res.status(201).json(product);
+    if (error) throw error;
+    res.status(201).json(data[0]);
   } catch (err) {
     console.error('Create product error:', err);
-    res.status(500).json({ error: 'Failed to create product' });
+    res.status(500).json({ error: `Failed to create product: ${err.message}` });
   }
 };
 
 exports.updateProduct = async (req, res) => {
   try {
     const { name, description, category, subCategory, price, discountedPrice, sizes, stock, featured } = req.body;
-    const product = await Product.findById(req.params.id);
+    let variantStock = null;
+    try {
+      if (req.body.variantStock) variantStock = JSON.parse(req.body.variantStock);
+    } catch (e) { console.error('Error parsing variantStock', e); }
+
+    // Fetch current product to handle images
+    const { data: product } = await supabaseAdmin.from('products').select('*').eq('id', req.params.id).single();
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    // Handle new uploaded images
-    let images = product.images;
+    let images = product.images || [];
     if (req.files && req.files.length > 0) {
-      const newImages = req.files.map(f => `/uploads/products/${f.filename}`);
-      images = [...images, ...newImages];
-    }
-    if (req.body.images) {
-      const urlImages = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
-      images = [...new Set([...images, ...urlImages])]; // Avoid duplicates
-    }
-    if (req.body.removeImages) {
-      const toRemove = Array.isArray(req.body.removeImages) ? req.body.removeImages : [req.body.removeImages];
-      images = images.filter(img => !toRemove.includes(img));
+      for (const file of req.files) {
+        const fileName = `${Date.now()}-${file.originalname}`;
+        const { data, error } = await supabaseAdmin.storage
+          .from('products')
+          .upload(fileName, fs.readFileSync(file.path), {
+            contentType: file.mimetype
+          });
+        if (!error) {
+          const { data: urlData } = supabaseAdmin.storage.from('products').getPublicUrl(fileName);
+          images.push(urlData.publicUrl);
+        }
+      }
     }
 
-    const updated = await Product.findByIdAndUpdate(
-      req.params.id,
-      {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .update({
         name: name || product.name,
         description: description !== undefined ? description : product.description,
         category: category || product.category,
-        subCategory: subCategory || product.subCategory,
+        sub_category: subCategory || product.sub_category,
         price: price ? parseFloat(price) : product.price,
-        discountedPrice: discountedPrice !== undefined ? (discountedPrice ? parseFloat(discountedPrice) : null) : product.discountedPrice,
+        discounted_price: discountedPrice !== undefined ? (discountedPrice ? parseFloat(discountedPrice) : null) : product.discounted_price,
+        sizes: sizes ? (typeof sizes === 'string' ? sizes.split(',').map(s => s.trim()) : sizes) : product.sizes,
         sizes: sizes ? (typeof sizes === 'string' ? sizes.split(',').map(s => s.trim()) : sizes) : product.sizes,
         stock: stock !== undefined ? parseInt(stock) : product.stock,
+        variant_stock: variantStock || product.variant_stock,
         featured: featured !== undefined ? (featured === 'true' || featured === true) : product.featured,
         images
-      },
-      { new: true }
-    );
+      })
+      .eq('id', req.params.id)
+      .select();
 
-    res.json(updated);
+    if (error) throw error;
+    res.json(data[0]);
   } catch (err) {
     console.error('Update product error:', err);
     res.status(500).json({ error: 'Failed to update product' });
   }
 };
 
-exports.updateStock = async (req, res) => {
-  try {
-    const { stock } = req.body;
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      { stock: parseInt(stock) },
-      { new: true }
-    );
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    res.json(product);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to update stock' });
-  }
-};
-
 exports.deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-
-    // Delete associated images
-    product.images.forEach(img => {
-      if (img.startsWith('/uploads/')) {
-        const filePath = path.join(__dirname, '../..', img);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
-    });
-
-    await Product.findByIdAndDelete(req.params.id);
+    const { error } = await supabaseAdmin.from('products').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ message: 'Product deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete product' });
   }
 };
 
+exports.updateStock = async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .update({ stock: parseInt(req.body.stock) })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update stock' });
+  }
+};
+
 // ============ ORDER MANAGEMENT ============
 exports.getOrders = async (req, res) => {
   try {
-    const orders = await Order.find()
-      .populate('user', 'email name')
-      .populate('items.product', 'name')
-      .sort({ createdAt: -1 });
-    res.json(orders);
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .select('*, profiles(email, name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch orders' });
   }
@@ -227,13 +265,13 @@ exports.getOrders = async (req, res) => {
 
 exports.getOrderById = async (req, res) => {
   try {
-    const order = await Order.findById(req.params.id)
-      .populate('user', 'email name phone')
-      .populate('items.product');
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-
-    const transaction = await Transaction.findOne({ order: order._id });
-    res.json({ order, transaction });
+    const { data: order, error } = await supabaseAdmin
+      .from('orders')
+      .select('*, profiles(email, name, phone), order_items(*, products(name))')
+      .eq('id', req.params.id)
+      .single();
+    if (error) return res.status(404).json({ error: 'Order not found' });
+    res.json(order);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch order' });
   }
@@ -241,26 +279,27 @@ exports.getOrderById = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
-    const order = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    ).populate('user', 'email');
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    res.json(order);
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .update({ status: req.body.status })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update order' });
   }
 };
-
 // ============ TRANSACTION MANAGEMENT ============
 exports.getTransactions = async (req, res) => {
   try {
-    const txns = await Transaction.find()
-      .populate('user', 'email name')
-      .populate('order')
-      .sort({ createdAt: -1 });
-    res.json(txns);
+    const { data, error } = await supabaseAdmin
+      .from('transactions')
+      .select('*, profiles(email, name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch transactions' });
   }
@@ -268,17 +307,20 @@ exports.getTransactions = async (req, res) => {
 
 exports.getSalesReport = async (req, res) => {
   try {
-    const txns = await Transaction.find({ paymentStatus: 'success' })
-      .populate('user', 'email')
-      .sort({ createdAt: -1 });
+    const { data: orders, error } = await supabaseAdmin
+      .from('orders')
+      .select('*, profiles(email)')
+      .eq('status', 'delivered');
 
-    let csv = 'Date,TransactionID,OrderID,User,Amount,Method\n';
-    txns.forEach(t => {
-      csv += `${new Date(t.createdAt).toLocaleDateString()},${t.transactionId},${t.orderId},${t.user?.email || 'N/A'},${t.amount},${t.paymentMethod}\n`;
+    if (error) throw error;
+
+    let csv = 'Order ID,User,Amount,Status,Date\n';
+    orders.forEach(o => {
+      csv += `${o.order_id},${o.profiles?.email},${o.total_amount},${o.status},${o.created_at}\n`;
     });
 
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=sales_report.csv');
+    res.header('Content-Type', 'text/csv');
+    res.attachment('sales-report.csv');
     res.send(csv);
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate report' });
@@ -288,11 +330,12 @@ exports.getSalesReport = async (req, res) => {
 // ============ REVIEW MANAGEMENT ============
 exports.getReviews = async (req, res) => {
   try {
-    const reviews = await Review.find()
-      .populate('user', 'email name')
-      .populate('product', 'name')
-      .sort({ createdAt: -1 });
-    res.json(reviews);
+    const { data, error } = await supabaseAdmin
+      .from('reviews')
+      .select('*, profiles(email), products(name)')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch reviews' });
   }
@@ -300,22 +343,23 @@ exports.getReviews = async (req, res) => {
 
 exports.approveReview = async (req, res) => {
   try {
-    const review = await Review.findByIdAndUpdate(
-      req.params.id,
-      { isApproved: req.body.isApproved },
-      { new: true }
-    ).populate('user', 'email name').populate('product', 'name');
-    if (!review) return res.status(404).json({ error: 'Review not found' });
-    res.json(review);
+    const { data, error } = await supabaseAdmin
+      .from('reviews')
+      .update({ is_approved: req.body.isApproved })
+      .eq('id', req.params.id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update review' });
+    res.status(500).json({ error: 'Failed to approve review' });
   }
 };
 
 exports.deleteReview = async (req, res) => {
   try {
-    const review = await Review.findByIdAndDelete(req.params.id);
-    if (!review) return res.status(404).json({ error: 'Review not found' });
+    const { error } = await supabaseAdmin.from('reviews').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ message: 'Review deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete review' });
