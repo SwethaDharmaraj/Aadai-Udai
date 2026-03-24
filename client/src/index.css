@@ -14,6 +14,44 @@
   --radius: 12px;
 }
 
+.btn-back {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  font-weight: 600;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: color 0.2s;
+}
+
+.btn-back:hover {
+  color: var(--maroon);
+}
+
+.btn-header-back {
+  background: var(--sand);
+  color: var(--maroon);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-left: 10px;
+  border: 1px solid var(--maroon);
+}
+
+.btn-header-back:hover {
+  background: var(--maroon);
+  color: var(--white);
+}
+
+.debug-info {
+  font-size: 0.8rem;
+  color: #999;
+  margin-bottom: 15px;
+}
+
 * {
   margin: 0;
   padding: 0;

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { userAPI, orderAPI } from '../api';
 import './Orders.css';
 import { generateInvoice } from '../utils/invoiceGenerator';
 
 export default function Orders() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -14,7 +16,8 @@ export default function Orders() {
   if (loading) return <div className="container"><p>Loading...</p></div>;
 
   return (
-    <div className="orders-page container">
+    <div className="orders-page container fade-in">
+      <button className="btn-back" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="section-title">Order History</h1>
       {orders.length === 0 ? (
         <p className="empty">No orders yet.</p>

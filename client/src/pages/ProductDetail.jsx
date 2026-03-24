@@ -79,7 +79,8 @@ export default function ProductDetail() {
   const isOutOfStock = size ? currentStock === 0 : product.stock === 0;
 
   return (
-    <div className="product-detail-page container">
+    <div className="product-detail-page container fade-in">
+      <button className="btn-back" onClick={() => navigate(-1)}>← Back to Collections</button>
       <div className="product-detail-grid">
         <div className="product-gallery">
           <div className="main-image">

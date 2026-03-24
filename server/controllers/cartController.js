@@ -109,7 +109,7 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
-    const { error } = await supabase
+    const { error } = await supabaseAdmin
       .from('cart_items')
       .delete()
       .eq('id', req.params.id)

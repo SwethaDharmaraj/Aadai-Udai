@@ -25,6 +25,7 @@ export default function Checkout() {
         email: u.email,
         role: u.profile?.role || 'user',
         name: u.profile?.name || u.user_metadata?.name,
+        phone: u.profile?.phone || u.user_metadata?.phone,
         addresses: u.profile?.addresses || []
       };
       setUser(userData);
@@ -77,6 +78,25 @@ export default function Checkout() {
       theme: {
         color: '#D4AF37',
       },
+      // Force UPI and other methods
+      config: {
+        display: {
+          blocks: {
+            banks: {
+              name: 'Methods',
+              instruments: [
+                { method: 'upi' },
+                { method: 'card' },
+                { method: 'netbanking' }
+              ]
+            }
+          },
+          sequence: ['block.banks'],
+          preferences: {
+            show_default_blocks: true
+          }
+        }
+      }
     };
 
     if (!window.Razorpay) {
@@ -91,6 +111,8 @@ export default function Checkout() {
     });
     rzp.open();
   };
+
+  const [gateway, setGateway] = useState(''); // 'razorpay', 'upi-qr', 'cod'
 
   const handlePlaceOrder = async () => {
     if (!selectedAddress) {
@@ -111,16 +133,16 @@ export default function Checkout() {
         result = await orderAPI.createFromCart(selectedAddress);
       }
       setOrder(result);
-      if (result.isDemo) {
-        setStep('payment');
-      } else {
-        initiateRazorpay(result);
-      }
+      setStep('payment');
     } catch (err) {
       alert(err.message || 'Failed to create order');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGatewaySelect = (choice) => {
+    setGateway(choice);
   };
 
   const [paymentMethod, setPaymentMethod] = useState('');
@@ -136,12 +158,17 @@ export default function Checkout() {
     try {
       await orderAPI.confirmPayment({
         transactionId: tId,
-        transaction_id: tId, // Send both
+        transaction_id: tId,
         paymentMethod: method,
         isDemo: true
       });
-      setPaymentMethod(method);
+      setGateway('cod'); // For success message reference
       setStep('success');
+
+      // Post-success prompt for invoice
+      if (window.confirm('Order Successful! Would you like to download your invoice receipt?')) {
+        generateInvoice(order.order, { ...order.transaction, payment_method: method });
+      }
     } catch (err) {
       alert('Payment failed: ' + err.message);
     } finally {
@@ -202,78 +229,106 @@ export default function Checkout() {
 
       {step === 'payment' && order && (
         <div className="payment-section fade-in">
-          <h2>2. How would you like to pay?</h2>
-
-          <div className="order-summary">
-            <h3>Order Summary</h3>
-            <div className="summary-row">
-              <span>Order ID:</span>
-              <strong>{order.order?.order_id || order.order?.orderId}</strong>
-            </div>
-            <div className="summary-row total">
-              <span>Amount to Pay:</span>
-              <strong>₹{order.order?.total_amount || order.order?.subtotal}</strong>
-            </div>
-          </div>
-
-          <div className="payment-methods">
-            <button className={`method-tab ${paymentMethod === 'UPI' ? 'active' : ''}`} onClick={() => setPaymentMethod('UPI')}>
-              <span className="icon">📱</span> UPI / QR Scan
-            </button>
-            <button className={`method-tab ${paymentMethod === 'Card' ? 'active' : ''}`} onClick={() => setPaymentMethod('Card')}>
-              <span className="icon">💳</span> Credit / Debit Card
-            </button>
-            <button className={`method-tab ${paymentMethod === 'COD' ? 'active' : ''}`} onClick={() => setPaymentMethod('COD')}>
-              <span className="icon">💵</span> Cash on Delivery
-            </button>
-          </div>
-
-          <div className="payment-detail-box">
-            {paymentMethod === 'UPI' && (
-              <div className="upi-payment text-center">
-                <h3>Scan to Pay</h3>
-                <div className="qr-container">
-                  <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=aadaiudai@upi&pn=AADAIUDAI&am=${order.order?.total_amount || order.order?.subtotal}&cu=INR`} alt="QR Code" />
-                </div>
-                <p>Scan this QR using Google Pay, PhonePe, or Any UPI App</p>
-                <button className="btn btn-gold" onClick={() => handleDemoPayment('UPI')} disabled={loading}>
-                  {loading ? 'Verifying...' : 'Click After Scanning'}
-                </button>
-              </div>
-            )}
-
-            {paymentMethod === 'Card' && (
-              <div className="card-payment">
-                <h3>Card Details</h3>
-                <div className="mock-card-form">
-                  <input className="input" placeholder="Card Number" maxLength={16} />
-                  <div className="row">
-                    <input className="input" placeholder="MM/YY" maxLength={5} />
-                    <input className="input" placeholder="CVV" maxLength={3} />
+          {!gateway ? (
+            <div className="gateway-selection">
+              <h2>2. Select Payment Gateway</h2>
+              <div className="gateway-options">
+                <div className="gateway-card card-hover" onClick={() => handleGatewaySelect('razorpay')}>
+                  <div className="gateway-icon">💳</div>
+                  <div className="gateway-info">
+                    <h3>Razorpay</h3>
+                    <p>Pay via Cards, Netbanking, or Wallet (Secure)</p>
                   </div>
-                  <input className="input" placeholder="Name on Card" />
+                  <span className="arrow">→</span>
                 </div>
-                <button className="btn btn-gold w-100" onClick={() => handleDemoPayment('Card')} disabled={loading}>
-                  {loading ? 'Processing...' : `Pay ₹${order.order?.total_amount || order.order?.subtotal}`}
-                </button>
-              </div>
-            )}
 
-            {paymentMethod === 'COD' && (
-              <div className="cod-payment text-center">
-                <h3>Cash on Delivery</h3>
-                <p>You can pay via cash or QR when the delivery partner arrives.</p>
-                <p className="note">Note: A small fee might apply for COD in some regions.</p>
-                <button className="btn btn-gold" onClick={() => handleDemoPayment('COD')} disabled={loading}>
-                  {loading ? 'Confirming...' : 'Place Order (COD)'}
-                </button>
-              </div>
-            )}
+                <div className="gateway-card card-hover" onClick={() => handleGatewaySelect('upi-qr')}>
+                  <div className="gateway-icon">📱</div>
+                  <div className="gateway-info">
+                    <h3>UPI / QR Scan</h3>
+                    <p>Instant scan & pay with any UPI App</p>
+                  </div>
+                  <span className="arrow">→</span>
+                </div>
 
-            {!paymentMethod && (
-              <p className="select-prompt">Please select a payment method above to continue.</p>
-            )}
-          </div>
+                <div className="gateway-card card-hover" onClick={() => handleGatewaySelect('cod')}>
+                  <div className="gateway-icon">💵</div>
+                  <div className="gateway-info">
+                    <h3>Cash on Delivery</h3>
+                    <p>Pay when you receive the product</p>
+                  </div>
+                  <span className="arrow">→</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="payment-gateway-gateway fade-in">
+              <button className="btn-back-selection" onClick={() => setGateway('')}>← Back to Options</button>
+
+              <div className="order-summary">
+                <h3>Order Summary</h3>
+                <div className="summary-row">
+                  <span>Order ID:</span>
+                  <strong>{order.order?.order_id || order.order?.orderId}</strong>
+                </div>
+                <div className="summary-row total">
+                  <span>Amount to Pay:</span>
+                  <strong>₹{order.order?.total_amount || order.order?.subtotal}</strong>
+                </div>
+              </div>
+
+              <div className="payment-detail-box">
+                {gateway === 'upi-qr' && (
+                  <div className="upi-payment text-center">
+                    <h3>Scan to Pay</h3>
+                    <div
+                      className="qr-container qr-interactive"
+                      onClick={() => {
+                        const tId = order?.transaction?.transaction_id || order?.transaction?.transactionId || order?.transaction?.id;
+                        const oId = order?.order?.order_id || order?.order?.orderId;
+                        window.open(`#/payment-success?txnId=${tId}&orderId=${oId}`, '_blank', 'width=600,height=800');
+                      }}
+                      title="Click to simulate scanning"
+                    >
+                      <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=upi://pay?pa=aadaiudai@upi&pn=AADAIUDAI&am=${order.order?.total_amount || order.order?.subtotal}&cu=INR`} alt="QR Code" />
+                      <div className="qr-overlay">Click to Scan</div>
+                    </div>
+                    <p>Scan this QR or <strong>Click it</strong> to simulate a mobile scan</p>
+                    <button className="btn btn-gold" onClick={() => handleDemoPayment('UPI-QR')} disabled={loading}>
+                      {loading ? 'Verifying...' : 'Confirm Payment Status'}
+                    </button>
+                  </div>
+                )}
+
+                {gateway === 'razorpay' && (
+                  <div className="razorpay-direct text-center">
+                    <h3>Razorpay Secure Checkout</h3>
+                    <div className="gateway-placeholder">
+                      <div className="gateway-logos">🔒 💳 📄</div>
+                      <p>You will be redirected to the secure Razorpay payment gateway.</p>
+                    </div>
+                    <button
+                      className="btn btn-gold w-100"
+                      onClick={() => initiateRazorpay(order)}
+                      disabled={loading}
+                    >
+                      {loading ? 'Launching...' : `Launch Razorpay (Pay ₹${order.order?.total_amount || order.order?.subtotal})`}
+                    </button>
+                  </div>
+                )}
+
+                {gateway === 'cod' && (
+                  <div className="cod-payment text-center">
+                    <h3>Cash on Delivery</h3>
+                    <p>Pay ₹<strong>{order.order?.total_amount || order.order?.subtotal}</strong> in cash or via mobile scanner when our delivery partner arrives at your door.</p>
+                    <button className="btn btn-gold" onClick={() => handleDemoPayment('COD')} disabled={loading}>
+                      {loading ? 'Confirming...' : 'Place Order (COD)'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

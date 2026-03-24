@@ -27,19 +27,40 @@ export default function Register() {
         e.preventDefault();
         setError('');
 
-        // Basic format check
+        // 1. Name validation: Only alphabets and dots. Must contain an initial (dot).
+        const nameRegex = /^[a-zA-Z\s.]*$/;
+        if (!nameRegex.test(form.name)) {
+            setError('Name should only contain alphabets and dots.');
+            return;
+        }
+        if (!form.name.includes('.')) {
+            setError('Name must include an initial (e.g., S. Swetha or Swetha D.)');
+            return;
+        }
+
+        // 2. Phone validation: Exactly 10 digits.
+        const phoneRegex = /^\d{10}$/;
+        if (!phoneRegex.test(form.phone)) {
+            setError('Phone number must be exactly 10 digits.');
+            return;
+        }
+
+        // 3. Email validation
         if (!form.email.includes('@') || !form.email.includes('.')) {
             setError('Please enter a valid email address.');
             return;
         }
 
-        if (form.password !== form.confirmPassword) {
-            setError('Passwords do not match.');
+        // 4. Password validation: Strong password
+        // (At least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char)
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordRegex.test(form.password)) {
+            setError('Password must be at least 8 characters and include uppercase, lowercase, number, and special character.');
             return;
         }
 
-        if (form.password.length < 6) {
-            setError('Password must be at least 6 characters.');
+        if (form.password !== form.confirmPassword) {
+            setError('Passwords do not match.');
             return;
         }
 

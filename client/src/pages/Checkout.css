@@ -114,6 +114,38 @@
   border: 4px solid var(--maroon);
   border-radius: 10px;
   width: fit-content;
+  position: relative;
+  overflow: hidden;
+}
+
+.qr-interactive {
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.qr-interactive:hover {
+  transform: scale(1.05);
+}
+
+.qr-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.qr-interactive:hover .qr-overlay {
+  opacity: 1;
 }
 
 .mock-card-form {
@@ -133,6 +165,92 @@
   text-align: center;
   color: var(--text-light);
   font-style: italic;
+}
+
+.gateway-options {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.gateway-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.gateway-card:hover {
+  border-color: var(--gold);
+  background: var(--sand);
+  transform: translateY(-2px);
+}
+
+.gateway-icon {
+  font-size: 2rem;
+  background: #f8f9fa;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+}
+
+.gateway-info {
+  flex: 1;
+}
+
+.gateway-info h3 {
+  margin: 0;
+  color: var(--maroon);
+  font-size: 1.1rem;
+}
+
+.gateway-info p {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.arrow {
+  color: #ccc;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.btn-back-selection {
+  background: none;
+  border: none;
+  color: #666;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 20px;
+  padding: 0;
+}
+
+.btn-back-selection:hover {
+  color: var(--maroon);
+  text-decoration: underline;
+}
+
+.razorpay-direct .gateway-placeholder {
+  padding: 40px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 25px;
+}
+
+.gateway-logos {
+  font-size: 2.5rem;
+  margin-bottom: 15px;
 }
 
 .checkout-success .success-icon {

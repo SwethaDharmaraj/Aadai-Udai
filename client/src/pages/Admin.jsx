@@ -25,6 +25,8 @@ function AdminLayout({ children }) {
           <Link to="/admin/users" className={path.includes('users') ? 'active' : ''}>Users</Link>
           <Link to="/admin/reviews" className={path.includes('reviews') ? 'active' : ''}>Reviews</Link>
           <Link to="/admin/transactions" className={path.includes('transactions') ? 'active' : ''}>Transactions</Link>
+          <hr className="divider" />
+          <Link to="/profile" className="sidebar-link">My Profile Settings</Link>
         </nav>
         <div className="admin-sidebar-footer">
           <Link to="/" className="sidebar-link">← Back to Store</Link>
@@ -310,8 +312,24 @@ function Users() {
     try { await adminAPI.updateUser(id, { role }); setUsers(await adminAPI.getUsers()); } catch (err) { alert(err.message); }
   };
 
-  const toggleActive = async (id, isActive) => {
-    try { await adminAPI.updateUser(id, { isActive }); setUsers(await adminAPI.getUsers()); } catch (err) { alert(err.message); }
+  const toggleActive = async (id, is_active) => {
+    try { await adminAPI.updateUser(id, { is_active }); setUsers(await adminAPI.getUsers()); } catch (err) { alert(err.message); }
+  };
+
+  const editUser = async (user) => {
+    const newName = prompt('Enter new name:', user.name || '');
+    const newPhone = prompt('Enter new phone:', user.phone || '');
+    if (newName === null && newPhone === null) return;
+
+    try {
+      await adminAPI.updateUser(user.id, {
+        ...(newName !== null && { name: newName }),
+        ...(newPhone !== null && { phone: newPhone })
+      });
+      setUsers(await adminAPI.getUsers());
+    } catch (err) {
+      alert('Update failed: ' + err.message);
+    }
   };
 
   return (
@@ -334,6 +352,7 @@ function Users() {
               <td><span className={`status ${u.is_active !== false ? 'active' : 'inactive'}`}>{u.is_active !== false ? 'Active' : 'Inactive'}</span></td>
               <td>{new Date(u.created_at || u.createdAt).toLocaleDateString()}</td>
               <td>
+                <button className="btn-sm" onClick={() => editUser(u)}>Edit Details</button>
                 <button className="btn-sm" onClick={() => toggleActive(u.id, !u.is_active)}>{u.is_active !== false ? 'Deactivate' : 'Activate'}</button>
               </td>
             </tr>

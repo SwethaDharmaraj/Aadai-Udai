@@ -2,8 +2,8 @@ const { supabase, supabaseAdmin } = require('../config/supabase');
 const { body, validationResult } = require('express-validator');
 
 exports.updateProfile = [
-  body('name').optional().trim(),
-  body('phone').optional().trim(),
+  body('name').optional().trim().matches(/^[a-zA-Z\s.]*$/).withMessage('Name must only contain alphabets and dots').custom(val => !val || val.includes('.')).withMessage('Name must include an initial (dot)'),
+  body('phone').optional().trim().matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -11,7 +11,7 @@ exports.updateProfile = [
         return res.status(400).json({ errors: errors.array() });
       }
       const { name, phone } = req.body;
-      const updates = { id: req.user.id, updated_at: new Date() };
+      const updates = {};
       if (name !== undefined) updates.name = name;
       if (phone !== undefined) updates.phone = phone;
 
@@ -23,9 +23,13 @@ exports.updateProfile = [
         query = supabaseAdmin.from('profiles').update(updates).eq('id', req.user.id);
       } else {
         // New profile, ensure defaults
-        updates.role = 'user';
-        updates.addresses = [];
-        query = supabaseAdmin.from('profiles').insert(updates);
+        const newProfile = {
+          ...updates,
+          id: req.user.id,
+          role: 'user',
+          addresses: []
+        };
+        query = supabaseAdmin.from('profiles').insert(newProfile);
       }
 
       const { data, error } = await query.select().single();
@@ -40,8 +44,8 @@ exports.updateProfile = [
 ];
 
 exports.addAddress = [
-  body('name').trim().notEmpty(),
-  body('phone').trim().matches(/^[6-9]\d{9}$/),
+  body('name').trim().notEmpty().matches(/^[a-zA-Z\s.]*$/).withMessage('Name must only contain alphabets and dots').custom(val => val.includes('.')).withMessage('Name must include an initial (dot)'),
+  body('phone').trim().matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
   body('addressLine1').trim().notEmpty(),
   body('addressLine2').optional().trim(),
   body('city').trim().notEmpty(),
@@ -105,8 +109,8 @@ exports.addAddress = [
 
 exports.updateAddress = [
   body('addressId').notEmpty(),
-  body('name').optional().trim(),
-  body('phone').optional().trim(),
+  body('name').optional().trim().matches(/^[a-zA-Z\s.]*$/).withMessage('Name must only contain alphabets and dots').custom(val => !val || val.includes('.')).withMessage('Name must include an initial (dot)'),
+  body('phone').optional().trim().matches(/^\d{10}$/).withMessage('Phone must be 10 digits'),
   body('addressLine1').optional().trim(),
   body('addressLine2').optional().trim(),
   body('city').optional().trim(),

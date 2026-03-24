@@ -25,7 +25,7 @@ function createWindow() {
 
   // Handle Razorpay Origin/Referer issue in Electron
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ['https://api.razorpay.com/*', 'https://checkout.razorpay.com/*'] },
+    { urls: ['https://api.razorpay.com/*', 'https://checkout.razorpay.com/*', 'https://*.razorpay.com/*'] },
     (details, callback) => {
       details.requestHeaders['Origin'] = 'https://checkout.razorpay.com';
       details.requestHeaders['Referer'] = 'https://checkout.razorpay.com';

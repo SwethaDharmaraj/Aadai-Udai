@@ -37,6 +37,9 @@ export default function Layout() {
               <span className="logo-icon">ஆ</span>
               <span className="logo-text">ஆடை உடை</span>
             </Link>
+            {window.location.hash && window.location.hash !== '#/' && (
+              <button className="btn-header-back" onClick={() => navigate(-1)}>← Back</button>
+            )}
             <form className="search-bar" onSubmit={handleSearch}>
               <input
                 type="text"

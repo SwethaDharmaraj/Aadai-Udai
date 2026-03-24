@@ -10,9 +10,21 @@ async function checkColumns() {
         .limit(1);
 
     if (error) {
-        console.log('ERROR: Columns missing or API error:', error.message);
+        console.log('ERROR (transactions):', error.message);
     } else {
-        console.log('SUCCESS: Columns found.');
+        console.log('SUCCESS: transactions columns found.');
+    }
+
+    console.log('Checking cart_items columns...');
+    const { data: cData, error: cError } = await supabaseAdmin
+        .from('cart_items')
+        .select('user_id, product_id, quantity, size')
+        .limit(1);
+
+    if (cError) {
+        console.log('ERROR (cart_items):', cError.message);
+    } else {
+        console.log('SUCCESS: cart_items columns found.');
     }
 }
 

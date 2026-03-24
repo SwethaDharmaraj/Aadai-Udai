@@ -14,6 +14,7 @@ import Orders from './pages/Orders';
 import Transactions from './pages/Transactions';
 import Register from './pages/Register';
 import Admin from './pages/Admin';
+import PaymentSuccess from './pages/PaymentSuccess';
 
 function Protected({ children }) {
   const token = localStorage.getItem('token');
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="profile" element={<Protected><Profile /></Protected>} />
           <Route path="orders" element={<Protected><Orders /></Protected>} />
           <Route path="transactions" element={<Protected><Transactions /></Protected>} />
+          <Route path="payment-success" element={<PaymentSuccess />} />
           <Route path="admin/*" element={<AdminRoute><Admin /></AdminRoute>} />
         </Route>
       </Routes>

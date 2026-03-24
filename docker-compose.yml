@@ -1,0 +1,60 @@
+
+
+services:
+  # The database service satisfies the "requires a database to function" scenario requirement
+  db:
+    image: postgres:15-alpine
+    container_name: aadaiudai_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: aadaiudai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: always
+
+  # Backend API built from the node app
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: aadaiudai_backend
+    ports:
+      - "5001:5001"
+    environment:
+      # Although using Supabase in production, this shows how to link internally if using local DB
+      # DATABASE_URL: postgres://postgres:mysecretpassword@db:5432/aadaiudai
+      - NODE_ENV=production
+      - PORT=5001
+    env_file:
+      - ./server/.env
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - db
+
+  # Frontend web app built using Vite and served via NGINX
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: aadaiudai_frontend
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+
+networks:
+  app-network:
+    driver: bridge

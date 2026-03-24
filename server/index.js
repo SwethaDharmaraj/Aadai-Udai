@@ -15,7 +15,14 @@ const reviewRoutes = require('./routes/reviews');
 
 const app = express();
 app.use(cors({
-  origin: true, // Allow any origin (reflects request origin), needed for Electron file://
+  origin: (origin, callback) => {
+    // Definitive fix for Electron file:// and null origins
+    if (!origin || origin === 'null' || origin.startsWith('file://')) {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
   credentials: true
 }));
 app.use(express.json());

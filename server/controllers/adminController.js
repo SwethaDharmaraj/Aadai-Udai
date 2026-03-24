@@ -5,9 +5,10 @@ const path = require('path');
 // Dashboard with comprehensive stats
 exports.dashboard = async (req, res) => {
   try {
-    const { data: usersCount } = await supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user');
-    const { data: productsCount } = await supabaseAdmin.from('products').select('id', { count: 'exact', head: true });
-    const { data: ordersCount } = await supabaseAdmin.from('orders').select('id', { count: 'exact', head: true });
+    // Basic counts
+    const { count: usersCount } = await supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'user');
+    const { count: productsCount } = await supabaseAdmin.from('products').select('*', { count: 'exact', head: true });
+    const { count: ordersCount } = await supabaseAdmin.from('orders').select('*', { count: 'exact', head: true });
 
     // Recent orders
     const { data: recentOrders } = await supabaseAdmin
@@ -16,10 +17,21 @@ exports.dashboard = async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(5);
 
+    // Stats
+    const { data: deliveredOrders } = await supabaseAdmin.from('orders').select('total_amount').eq('status', 'delivered');
+    const totalSales = deliveredOrders?.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0) || 0;
+
+    const { data: lowStockProducts } = await supabaseAdmin.from('products').select('id, name, stock').lt('stock', 5);
+    const { count: pendingReviews } = await supabaseAdmin.from('reviews').select('*', { count: 'exact', head: true }).eq('is_approved', false);
+
     res.json({
-      users: usersCount?.length || 0,
-      products: productsCount?.length || 0,
-      orders: ordersCount?.length || 0,
+      users: usersCount || 0,
+      products: productsCount || 0,
+      orders: ordersCount || 0,
+      totalSales: Math.round(totalSales),
+      lowStockCount: lowStockProducts?.length || 0,
+      lowStockProducts: lowStockProducts || [],
+      pendingReviews: pendingReviews || 0,
       recentOrders
     });
   } catch (err) {
@@ -82,11 +94,23 @@ exports.getUserById = async (req, res) => {
 
 exports.updateUser = async (req, res) => {
   try {
+    const { name, phone } = req.body;
+    const nameRegex = /^[a-zA-Z\s.]*$/;
+    const phoneRegex = /^\d{10}$/;
+
+    if (name && (!nameRegex.test(name) || !name.includes('.'))) {
+      return res.status(400).json({ error: 'Invalid name. Must contain only alphabets and dots, and include an initial (dot).' });
+    }
+    if (phone && !phoneRegex.test(phone)) {
+      return res.status(400).json({ error: 'Invalid phone number. Must be exactly 10 digits.' });
+    }
+
     const { data, error } = await supabaseAdmin.from('profiles').update(req.body).eq('id', req.params.id).select().single();
     if (error) throw error;
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update user' });
+    console.error('Update User Error:', err);
+    res.status(500).json({ error: 'Failed to update user: ' + (err.message || 'Internal Error') });
   }
 };
 

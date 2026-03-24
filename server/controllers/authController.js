@@ -45,6 +45,26 @@ exports.register = [
   async (req, res) => {
     try {
       const { name, email, phone, password } = req.body;
+
+      // 0. Manual Validations
+      const nameRegex = /^[a-zA-Z\s.]*$/;
+      const phoneRegex = /^\d{10}$/;
+      // At least 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+      if (!name || !nameRegex.test(name) || !name.includes('.')) {
+        return res.status(400).json({ error: 'Invalid name. Must contain only alphabets and dots, and include an initial (dot).' });
+      }
+      if (!phone || !phoneRegex.test(phone)) {
+        return res.status(400).json({ error: 'Invalid phone number. Must be exactly 10 digits.' });
+      }
+      if (!email || !email.includes('@')) {
+        return res.status(400).json({ error: 'Invalid email address.' });
+      }
+      if (!password || !passwordRegex.test(password)) {
+        return res.status(400).json({ error: 'Password is too weak. Must be at least 8 characters and include uppercase, lowercase, number, and special character.' });
+      }
+
       const isAdmin = email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
       console.log(`[AUTH-TRACE] Signup Request: ${email} (Admin: ${isAdmin})`);

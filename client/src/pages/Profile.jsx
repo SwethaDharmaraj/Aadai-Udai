@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { userAPI, authAPI } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './Profile.css';
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { refreshUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -26,6 +27,20 @@ export default function Profile() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    // Validations
+    const nameRegex = /^[a-zA-Z\s.]*$/;
+    const phoneRegex = /^\d{10}$/;
+
+    if (!nameRegex.test(name) || !name.includes('.')) {
+      alert('Invalid name. Must contain only alphabets and dots, and include an initial (dot).');
+      return;
+    }
+    if (!phoneRegex.test(phone)) {
+      alert('Phone number must be exactly 10 digits.');
+      return;
+    }
+
     try {
       await userAPI.updateProfile({ name, phone });
       setProfile({ ...profile, profile: { ...profile.profile, name, phone } });
@@ -41,7 +56,8 @@ export default function Profile() {
   const currentProfile = profile?.profile || profile;
 
   return (
-    <div className="profile-page container">
+    <div className="profile-page container fade-in">
+      <button className="btn-back" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="section-title">My Profile</h1>
 
       <div className="profile-card">
@@ -92,6 +108,20 @@ function AddressManager({ onUpdate }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validations
+    const nameRegex = /^[a-zA-Z\s.]*$/;
+    const phoneRegex = /^\d{10}$/;
+
+    if (!nameRegex.test(form.name) || !form.name.includes('.')) {
+      alert('Invalid address recipient name. Must contain only alphabets and dots, and include an initial (dot).');
+      return;
+    }
+    if (!phoneRegex.test(form.phone)) {
+      alert('Phone number must be exactly 10 digits.');
+      return;
+    }
+
     try {
       let data;
       if (editingId) {
@@ -144,10 +174,10 @@ function AddressManager({ onUpdate }) {
       <h2>Delivery Addresses</h2>
       <div className="address-grid">
         {addresses.map((a) => (
-          <div key={a.id} className={`address-item ${a.isDefault ? 'default' : ''}`}>
+          <div key={a.id} className={`address - item ${a.isDefault ? 'default' : ''} `}>
             {a.isDefault && <span className="badge">Default</span>}
             <p><strong>{a.name}</strong> {a.phone}</p>
-            <p>{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}, {a.city}, {a.state} - {a.pincode}</p>
+            <p>{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2} ` : ''}, {a.city}, {a.state} - {a.pincode}</p>
             <div className="address-actions">
               <button className="btn-link" onClick={() => handleEdit(a)}>Edit</button>
               <button className="btn-link" onClick={() => handleDelete(a.id)}>Remove</button>

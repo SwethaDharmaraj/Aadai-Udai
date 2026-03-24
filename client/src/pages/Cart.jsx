@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { cartAPI } from '../api';
 import './Cart.css';
 
 export default function Cart() {
+  const navigate = useNavigate();
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,10 +40,13 @@ export default function Cart() {
 
   if (items.length === 0) {
     return (
-      <div className="cart-page container">
+      <div className="cart-page container fade-in">
         <h1 className="section-title">Your Cart</h1>
         <div className="cart-empty">
           <p>Your cart is empty.</p>
+          {sessionStorage.getItem('user') && (
+            <p className="debug-info">Logged in as: {JSON.parse(sessionStorage.getItem('user')).email}</p>
+          )}
           <Link to="/collections" className="btn btn-primary">Continue Shopping</Link>
         </div>
       </div>
@@ -50,7 +54,8 @@ export default function Cart() {
   }
 
   return (
-    <div className="cart-page container">
+    <div className="cart-page container fade-in">
+      <button className="btn-back" onClick={() => navigate(-1)}>← Back</button>
       <h1 className="section-title">Your Cart</h1>
       <div className="cart-layout">
         <div className="cart-items">
